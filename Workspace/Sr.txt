@@ -1,0 +1,84 @@
+اعتمدتُ هنا أقرب ملف JS مسؤول وظيفيًا في السيرفر، ثم ملف SQL المقابل للكيان أو الجدول/المنظار.
+بعض الملفات مثل ReportsRepositoryImpl.kt و CertificatePinningInterceptor.kt ليس لها نظير حرفي في Node.js، لذلك ربطتها بأقرب ملف منطقي ومتماسك معماريًا.
+
+16) البيانات - الشبكة
+
+185. data/remote/dto/AccountingDto.kt                 → src/modules/accounting/accounting.model.js              → src/database/migrations/012_accounting.sql✅
+186. data/remote/dto/AuditLogDto.kt                   → src/modules/auditLogs/auditLog.model.js                  → src/database/migrations/013_audit_logs.sql✅
+187. data/remote/dto/CustomerDto.kt                   → src/modules/customers/customer.model.js                  → src/database/migrations/003_customers.sql✅
+188. data/remote/dto/EmployeeDto.kt                   → src/modules/employees/employee.model.js                  → src/database/migrations/004_employees.sql✅
+189. data/remote/dto/ExpenseDto.kt                    → src/modules/expenses/expense.model.js                    → src/database/migrations/011_expenses.sql✅
+190. data/remote/dto/InvoiceDto.kt                    → src/modules/sales/sale.model.js                          → src/database/migrations/008_sales_invoices.sql✅
+191. data/remote/dto/PaymentDto.kt                    → src/modules/payments/payment.model.js                    → src/database/migrations/010_payments_verification.sql✅
+192. data/remote/dto/PaymentVerificationDto.kt        → src/modules/paymentVerification/paymentVerification.model.js → src/database/migrations/010_payments_verification.sql✅
+193. data/remote/dto/ProductDto.kt                    → src/modules/products/product.model.js                    → src/database/migrations/006_products_inventory.sql✅
+194. data/remote/dto/PurchaseDto.kt                   → src/modules/purchases/purchase.model.js                  → src/database/migrations/007_purchases.sql✅
+195. data/remote/dto/RefundDto.kt                     → src/modules/returns/refund.model.js                      → src/database/migrations/009_returns_refunds.sql✅
+196. data/remote/dto/ReturnDto.kt                   → src/modules/returns/return.model.js                      → src/database/migrations/009_returns_refunds.sql✅
+197. data/remote/dto/StockDto.kt                      → src/modules/inventory/inventory.model.js                 → src/database/migrations/016_stock_movements.sql✅
+198. data/remote/dto/SubscriptionResponseDto.kt       → src/modules/subscriptions/subscription.model.js          → src/database/migrations/014_subscriptions.sql
+199. data/remote/dto/SupplierDto.kt                   → src/modules/suppliers/supplier.model.js                  → src/database/migrations/005_suppliers.sql✅
+200. data/remote/dto/auth/AuthResponseDto.kt          → src/modules/auth/auth.model.js                           → src/database/migrations/018_sessions_otp_resets.sql✅
+201. data/remote/dto/auth/ForgotPasswordRequest.kt     → src/modules/auth/auth.validator.js                       → src/database/migrations/018_sessions_otp_resets.sql✅
+202. data/remote/dto/auth/LoginRequestDto.kt           → src/modules/auth/auth.validator.js                       → src/database/migrations/002_users_roles.sql
+203. data/remote/dto/auth/RegisterRequestDto.kt        → src/modules/auth/auth.validator.js                       → src/database/migrations/002_users_roles.sql
+204. data/remote/dto/auth/ResetPasswordRequest.kt      → src/modules/auth/auth.validator.js                       → src/database/migrations/018_sessions_otp_resets.sql
+205. data/remote/dto/auth/VerifyOtpRequest.kt          → src/modules/auth/auth.validator.js                       → src/database/migrations/018_sessions_otp_resets.sql
+206. data/remote/api/ApiService.kt                     → src/routes/api.v1.js                                     → src/database/migrations/001_init.sql✅
+207. data/remote/api/AuthApiService.kt                 → src/modules/auth/auth.routes.js                          → src/database/migrations/002_users_roles.sql✅
+208. data/remote/interceptor/AuthInterceptor.kt        → src/core/middlewares/auth.middleware.js                  → src/database/migrations/018_sessions_otp_resets.sql✅
+209. data/remote/interceptor/CertificatePinningInterceptor.kt → src/config/cors.config.js                          → src/database/migrations/001_init.sql✅
+210. data/remote/interceptor/PaymentAuthInterceptor.kt → src/integrations/payments/paymentGateway.service.js      → src/database/migrations/010_payments_verification.sql✅
+211. data/remote/datasource/RemoteDataSource.kt        → src/core/utils/asyncHandler.js                           → src/database/migrations/001_init.sql✅
+212. data/remote/datasource/AuthRemoteDataSource.kt    → src/modules/auth/auth.repository.js                      → src/database/migrations/002_users_roles.sql
+213. data/remote/datasource/AuthRemoteDataSourceImpl.kt → src/modules/auth/auth.service.js                        → src/database/migrations/018_sessions_otp_resets.sql✅
+214. data/remote/datasource/AccountingRemoteDataSource.kt → src/modules/accounting/accounting.repository.js       → src/database/migrations/012_accounting.sql
+215. data/remote/datasource/AuditLogRemoteDataSource.kt → src/modules/auditLogs/auditLog.repository.js           → src/database/migrations/013_audit_logs.sql✅
+216. data/remote/datasource/CustomerRemoteDataSource.kt → src/modules/customers/customer.repository.js            → src/database/migrations/003_customers.sql✅
+217. data/remote/datasource/EmployeeRemoteDataSource.kt → src/modules/employees/employee.repository.js            → src/database/migrations/004_employees.sql✅
+218. data/remote/datasource/ExpenseRemoteDataSource.kt → src/modules/expenses/expense.repository.js              → src/database/migrations/011_expenses.sql✅
+219. data/remote/datasource/InventoryRemoteDataSource.kt → src/modules/inventory/inventory.repository.js          → src/database/migrations/016_stock_movements.sql✅
+220. data/remote/datasource/PaymentRemoteDataSource.kt → src/modules/payments/payment.repository.js               → src/database/migrations/010_payments_verification.sql
+221. data/remote/datasource/PaymentVerificationRemoteDataSource.kt → src/modules/paymentVerification/paymentVerification.repository.js → src/database/migrations/010_payments_verification.sql✅
+222. data/remote/datasource/PurchaseRemoteDataSource.kt → src/modules/purchases/purchase.repository.js            → src/database/migrations/007_purchases.sql✅
+223. data/remote/datasource/DefaultReturnRemoteDataSource.kt → src/modules/returns/return.repository.js             → src/database/migrations/009_returns_refunds.sql✅
+224. data/remote/datasource/ReturnRemoteDataSource.kt  → src/modules/returns/return.repository.js                 → src/database/migrations/009_returns_refunds.sql✅
+225. data/remote/datasource/SalesRemoteDataSource.kt   → src/modules/sales/sale.repository.js                    → src/database/migrations/008_sales_invoices.sql✅
+226. data/remote/datasource/SupplierRemoteDataSource.kt → src/modules/suppliers/supplier.repository.js            → src/database/migrations/005_suppliers.sql✅
+
+17) البيانات - التحويلات
+
+227. data/mapper/AuthMapper.kt                         → src/modules/auth/auth.mapper.js                          → src/database/migrations/002_users_roles.sql
+228. data/mapper/AccountingMapper.kt                   → src/modules/accounting/accounting.mapper.js              → src/database/migrations/012_accounting.sql
+229. data/mapper/AuditLogMapper.kt                     → src/modules/auditLogs/auditLog.mapper.js                  → src/database/migrations/013_audit_logs.sql
+230. data/mapper/CustomerMapper.kt                     → src/modules/customers/customer.mapper.js                  → src/database/migrations/003_customers.sql
+231. data/mapper/EmployeeMapper.kt                     → src/modules/employees/employee.mapper.js                  → src/database/migrations/004_employees.sql✅
+232. data/mapper/ExpenseMapper.kt                      → src/modules/expenses/expense.mapper.js                    → src/database/migrations/011_expenses.sql✅
+233. data/mapper/InvoiceMapper.kt                      → src/modules/sales/sale.mapper.js                          → src/database/migrations/008_sales_invoices.sql✅
+234. data/mapper/PaymentMapper.kt                      → src/modules/payments/payment.mapper.js                    → src/database/migrations/010_payments_verification.sql✅
+235. data/mapper/ProductMapper.kt                      → src/modules/products/product.mapper.js                    → src/database/migrations/006_products_inventory.sql
+236. data/mapper/PurchaseMapper.kt                     → src/modules/purchases/purchase.mapper.js                  → src/database/migrations/007_purchases.sql
+237. data/mapper/ReturnMapper.kt                       → src/modules/returns/return.mapper.js                      → src/database/migrations/009_returns_refunds.sql
+238. data/mapper/StockMapper.kt                        → src/modules/inventory/inventory.mapper.js                 → src/database/migrations/016_stock_movements.sql
+239. data/mapper/SupplierMapper.kt                     → src/modules/suppliers/supplier.mapper.js                  → src/database/migrations/005_suppliers.sql✅
+
+18) البيانات - المستودعات
+
+240. data/repository/AuthRepositoryImpl.kt             → src/modules/auth/auth.repository.js                      → src/database/migrations/002_users_roles.sql
+241. data/repository/RegisterRepositoryImpl.kt          → src/modules/auth/auth.service.js                         → src/database/migrations/002_users_roles.sql
+242. data/repository/AccountingRepositoryImpl.kt        → src/modules/accounting/accounting.repository.js          → src/database/migrations/012_accounting.sql
+243. data/repository/AuditLogRepositoryImpl.kt          → src/modules/auditLogs/auditLog.repository.js              → src/database/migrations/013_audit_logs.sql✅
+244. data/repository/CustomerRepositoryImpl.kt          → src/modules/customers/customer.repository.js             → src/database/migrations/003_customers.sql
+245. data/repository/EmployeeRepositoryImpl.kt          → src/modules/employees/employee.repository.js             → src/database/migrations/004_employees.sql
+246. data/repository/ExpenseRepositoryImpl.kt            → src/modules/expenses/expense.repository.js               → src/database/migrations/011_expenses.sql
+247. data/repository/InvoiceRepositoryImpl.kt            → src/modules/sales/sale.repository.js                     → src/database/migrations/008_sales_invoices.sql
+248. data/repository/PaymentRepositoryImpl.kt            → src/modules/payments/payment.repository.js               → src/database/migrations/010_payments_verification.sql
+249. data/repository/ProductRepositoryImpl.kt            → src/modules/products/product.repository.js               → src/database/migrations/006_products_inventory.sql
+250. data/repository/PurchaseRepositoryImpl.kt           → src/modules/purchases/purchase.repository.js             → src/database/migrations/007_purchases.sql
+251. data/repository/ReportsRepositoryImpl.kt            → src/modules/reports/report.repository.js                 → src/database/views/v_financial_summary.sql
+252. data/repository/ReturnRepositoryImpl.kt             → src/modules/returns/return.repository.js                 → src/database/migrations/009_returns_refunds.sql
+253. data/repository/SalesRepositoryImpl.kt              → src/modules/sales/sale.repository.js                     → src/database/migrations/008_sales_invoices.sql
+254. data/repository/StockRepositoryImpl.kt              → src/modules/inventory/inventory.repository.js            → src/database/migrations/016_stock_movements.sql
+255. data/repository/SubscriptionRepositoryImpl.kt       → src/modules/subscriptions/subscription.repository.js     → src/database/migrations/014_subscriptions.sql
+256. data/repository/SupplierRepositoryImpl.kt           → src/modules/suppliers/supplier.repository.js             → src/database/migrations/005_suppliers.sql
+

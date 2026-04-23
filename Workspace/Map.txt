@@ -1,0 +1,418 @@
+1) النواة الأساسية
+1. core/base/UiState.kt✅
+2. core/base/UiEvent.kt✅
+3. core/dispatchers/AppDispatchers.kt✅
+4. core/base/BaseViewModel.kt✅
+2) الأدوات العامة
+5. core/utils/Constants.kt✅
+6. core/utils/BigDecimalExtensions.kt✅
+7. core/utils/CurrencyFormatter.kt ✅
+8. core/utils/DateTimeUtils.kt ✅
+9. core/utils/HashUtils.kt✅
+10. core/utils/ValidationUtils.kt✅
+3) الشبكة
+11. core/network/ApiException.kt ✅
+12.core/network/NetworkResult.kt ✅
+13. core/network/ConnectivityObserver.kt✅
+14. core/network/CertificatePinningConfig.kt✅
+15. core/network/SecureApiClient.kt✅
+4) الأمان والتشفير
+16. core/security/crypto/SecureRandomProvider.kt✅
+17. core/security/crypto/AesCipher.kt✅
+18. core/security/crypto/KeyStoreCipher.kt✅
+19. core/security/crypto/HmacSigner.kt ✅
+20. core/security/KeyStoreManager.kt✅
+21. core/security/SecurePrefs.kt ✅
+22. core/security/CryptoManager.kt ✅
+23. core/security/CertificatePinning.kt✅
+24. core/security/AppSignatureVerifier.kt✅
+25. core/security/RootDetector.kt ✅
+26. core/security/DebugDetector.kt✅
+27. core/security/IntegrityChecker.kt ✅
+28. core/security/TamperProtection.kt ✅
+29. core/security/SessionManager.kt ✅
+30. core/security/SubscriptionGuard.kt✅
+5) أمان التطبيق الداخلي 
+31. core/security/app/obfuscation/StringObfuscator.kt✅
+32. core/security/app/obfuscation/ProGuardHints.kt ✅
+33. core/security/app/hardening/HookDetection.kt✅
+34. core/security/app/hardening/DebugGuard.kt ✅
+35. core/security/app/hardening/RootGuard.kt✅
+36. core/security/app/anti_tamper/SignatureChecker.kt ✅
+37. core/security/app/anti_tamper/IntegrityTokenProvider.kt✅
+
+6) العتاد
+38. core/hardware/contracts/IBarcodeScanner.kt✅
+39. core/hardware/contracts/IPrinter.kt✅
+
+7) الماسح الضوئي
+40. core/hardware/scanner/ScanResult.kt✅
+41. core/hardware/scanner/BarcodeScannerDriver.kt ✅
+42. core/hardware/scanner/ScannerService.kt✅
+
+8) الطباعة
+43. core/hardware/printer/PrintJob.kt ✅
+44. core/hardware/printer/PrinterConnection.kt✅
+45. core/hardware/printer/ThermalPrinterDriver.kt ✅
+46. core/hardware/printer/PrinterService.kt
+
+9) الدفع 
+47. core/payment/contracts/IPaymentGateway.kt✅
+48. core/payment/contracts/IPaymentProcessor.kt✅
+49. core/payment/contracts/IPaymentSecurity.kt✅
+50. core/payment/contracts/IPaymentVerifier.kt✅
+51. core/payment/models/PaymentIntent.kt ✅
+52. core/payment/models/PaymentResult.kt✅
+53. core/payment/models/PaymentReceipt.kt ✅
+54. core/payment/models/PaymentVerification.kt✅
+55. core/payment/models/RefundRequest.kt✅
+56. core/payment/crypto/PaymentKeyProvider.kt ✅
+57. core/payment/crypto/PaymentPayloadEncryptor.kt ✅
+58. core/payment/crypto/PaymentSignatureValidator.kt ✅
+59. core/payment/security/PaymentTokenVault.kt✅
+60. core/payment/security/PaymentFraudGuard.kt✅
+61. core/payment/processor/PaymentProcessor.kt✅
+62. core/payment/processor/PaymentVerificationService.kt ✅
+63. core/payment/processor/RefundService.kt✅
+
+
+---
+
+10) المجال - النماذج
+64. domain/model/Role.kt ✅
+65. domain/model/Permission.kt ✅
+66. domain/model/User.kt✅
+67. domain/model/AuditAction.kt ✅
+68. domain/model/AuditSeverity.kt ✅
+69. domain/model/AuditActor.kt✅
+70. domain/model/AuditTarget.kt ✅
+71. domain/model/AuditContext.kt ✅
+72. domain/model/AuditLog.kt ✅
+73. domain/model/Customer.kt ✅
+74. domain/model/Employee.kt ✅
+75. domain/model/Supplier.kt✅
+76. domain/model/Product.kt ✅
+77. domain/model/StockItem.kt✅
+78. domain/model/UnitOfMeasure.kt ✅
+79. domain/model/UnitConversion.kt✅
+80. domain/model/SaleItem.kt✅
+81. domain/model/Sale.kt ✅
+82. domain/model/SaleInvoiceStatus.kt✅
+83. domain/model/SaleInvoice.kt✅
+84. domain/model/Purchase.kt✅
+85. domain/model/Return.kt ✅
+86. domain/model/Invoice.kt✅
+87. domain/model/Expense.kt ✅
+88. domain/model/AccountingEntry.kt ✅
+89. domain/model/PaymentMethod.kt ✅
+90. domain/model/PaymentStatus.kt ✅
+91. domain/model/PaymentTransaction.kt✅
+92. domain/model/PaymentRecord.kt ✅
+93. domain/model/PaymentAuthorization.kt ✅
+94. domain/model/PaymentVerification.kt ✅
+95. domain/model/Report.kt ✅
+96. domain/model/SubscriptionInfo.kt ✅
+97. domain/model/LegalInvoiceStatus.kt✅
+
+11) المجال - المستودعات
+98. domain/repository/AccountingRepository.kt✅
+99. domain/repository/AuditLogRepository.kt ✅
+100. domain/repository/AuthRepository.kt ✅
+101. domain/repository/CustomerRepository.kt ✅
+102. domain/repository/EmployeeRepository.kt ✅
+103. domain/repository/ExpenseRepository.kt ✅
+104. domain/repository/InvoiceRepository.kt ✅
+105. domain/repository/PaymentRepository.kt ✅
+106. domain/repository/ProductRepository.kt ✅
+107. domain/repository/PurchaseRepository.kt ✅
+108. domain/repository/ReportsRepository.kt✅
+109. domain/repository/ReturnRepository.kt✅
+110. domain/repository/SalesRepository.kt ✅
+111. domain/repository/SortDirection.kt✅
+112. domain/repository/StockRepository.kt ✅
+113. domain/repository/SubscriptionRepository.kt✅
+114. domain/repository/SupplierRepository.kt✅
+115. domain/repository/RegisterRepository.kt✅
+
+12) المجال - حالات الاستخدام 
+116. domain/usecase/CheckPermissionUseCase.kt✅
+117. domain/usecase/AuthorizeHardwareAccessUseCase.kt✅
+118. domain/usecase/RequestScannerAccessUseCase.kt ✅
+119. domain/usecase/RequestPrinterAccessUseCase.kt ✅
+120. domain/usecase/EncryptSensitiveDataUseCase.kt ✅
+121. domain/usecase/CheckAppIntegrityUseCase.kt✅
+122. domain/usecase/RecordSecurityAuditUseCase.kt ✅
+123. domain/usecase/LogAuditEventUseCase.kt ✅
+124. domain/usecase/ClearOldAuditLogsUseCase.kt✅
+125. domain/usecase/GetAuditLogsUseCase.kt ✅
+126. domain/usecase/GetCustomersUseCase.kt ✅
+127. domain/usecase/GetEmployeesUseCase.kt ✅
+128. domain/usecase/GetSuppliersUseCase.kt ✅
+129. domain/usecase/GetExpensesUseCase.kt✅
+130. domain/usecase/GetPurchasesUseCase.kt ✅
+131. domain/usecase/GetReturnsUseCase.kt✅
+132. domain/usecase/GetInventoryUseCase.kt ✅
+133. domain/usecase/CalculateStockUseCase.kt✅
+134. domain/usecase/CreateInvoiceUseCase.kt
+135. domain/usecase/ProcessSaleUseCase.kt ✅
+136. domain/usecase/ProcessPaymentUseCase.kt✅
+137. domain/usecase/VerifyPaymentUseCase.kt ✅
+138. domain/usecase/RefundPaymentUseCase.kt ✅
+139. domain/usecase/SyncInventoryUseCase.kt✅
+140. domain/usecase/GetReportsUseCase.kt ✅
+141. domain/usecase/LogoutUseCase.kt✅
+
+13) المجال - auth
+142. domain/usecase/auth/ValidateEmailUseCase.kt✅
+143. domain/usecase/auth/ValidatePasswordUseCase.kt ✅
+144. domain/usecase/auth/GetSessionStatusUseCase.kt ✅
+145. domain/usecase/auth/RequestPasswordResetUseCase.kt 
+146. domain/usecase/auth/VerifyResetCodeUseCase.kt ✅
+147. domain/usecase/auth/ConfirmNewPasswordUseCase.kt ✅
+148. domain/usecase/auth/RegisterUserUseCase.kt✅
+
+14) المجال - subscription
+149. domain/usecase/subscription/GetSubscriptionStatusUseCase.kt ✅
+150. domain/usecase/subscription/ValidateActionPermissionUseCase.kt✅
+
+
+---
+
+15) البيانات - المحلية
+151. data/local/entity/AccountingEntryEntity.kt✅
+152. data/local/entity/AuditLogEntity.kt✅
+153. data/local/entity/CustomerEntity.kt ✅
+154. data/local/entity/EmployeeEntity.kt✅
+155. data/local/entity/ExpenseEntity.kt ✅
+156. data/local/entity/InvoiceEntity.kt ✅
+157. data/local/entity/PaymentTransactionEntity.kt ✅
+158. data/local/entity/PendingSyncEntity.kt ✅
+159. data/local/entity/ProductEntity.kt✅
+160. data/local/entity/PurchaseEntity.kt ✅
+161. data/local/entity/ReturnEntity.kt ✅
+162. data/local/entity/SecureKeyEntity.kt✅
+163. data/local/entity/StockEntity.kt ✅
+164. data/local/entity/SupplierEntity.kt ✅
+165. data/local/converters/AppConverters.kt✅
+166. data/local/converters/AuditLogConverters.kt✅
+167. data/local/converters/PurchaseConverters.kt✅
+168. data/local/converters/ReturnConverters.kt✅
+169. data/local/dao/AccountingDao.kt✅
+170. data/local/dao/AuditLogDao.kt ✅
+171. data/local/dao/CustomerDao.kt ✅
+172. data/local/dao/EmployeeDao.kt✅
+173. data/local/dao/ExpenseDao.kt ✅
+174. data/local/dao/InvoiceDao.kt✅
+175. data/local/dao/PaymentDao.kt✅
+176. data/local/dao/PendingSyncDao.kt ✅
+177. data/local/dao/ProductDao.kt✅
+178. data/local/dao/PurchaseDao.kt ✅
+179. data/local/dao/ReturnDao.kt ✅
+180. data/local/dao/StockDao.kt ✅
+181. data/local/dao/SupplierDao.kt ✅
+182. data/local/database/AppDatabase.kt✅
+183. data/local/database/DatabaseMigrations.kt✅
+184. data/local/preference/SettingsDataStore.kt✅
+
+16) البيانات - الشبكة
+185. data/remote/dto/AccountingDto.kt ✅
+186. data/remote/dto/AuditLogDto.kt✅
+187. data/remote/dto/CustomerDto.kt✅
+188. data/remote/dto/EmployeeDto.kt ✅
+189. data/remote/dto/ExpenseDto.kt ✅
+190. data/remote/dto/InvoiceDto.kt ✅
+191. data/remote/dto/PaymentDto.kt ✅
+192. data/remote/dto/PaymentVerificationDto.kt✅
+193. data/remote/dto/ProductDto.kt ✅
+194. data/remote/dto/PurchaseDto.kt ✅
+195. data/remote/dto/RefundDto.kt ✅
+196. data/remote/dto/ReturnDto.kt✅
+197. data/remote/dto/StockDto.kt✅
+198. data/remote/dto/SubscriptionResponseDto.kt✅
+199. data/remote/dto/SupplierDto.kt ✅
+200. data/remote/dto/auth/AuthResponseDto.kt✅
+201. data/remote/dto/auth/ForgotPasswordRequest.kt ✅
+202. data/remote/dto/auth/LoginRequestDto.kt✅ 
+203. data/remote/dto/auth/RegisterRequestDto.kt✅
+204. data/remote/dto/auth/ResetPasswordRequest.kt ✅
+205. data/remote/dto/auth/VerifyOtpRequest.kt✅
+206. data/remote/api/ApiService.kt✅
+207. data/remote/api/AuthApiService.kt✅
+208. data/remote/interceptor/AuthInterceptor.kt✅
+209. data/remote/interceptor/CertificatePinningInterceptor.kt✅
+210. data/remote/interceptor/PaymentAuthInterceptor.kt ✅
+211. data/remote/datasource/RemoteDataSource.kt✅
+212. data/remote/datasource/AuthRemoteDataSource.kt ✅
+213. data/remote/datasource/AuthRemoteDataSourceImpl.kt ✅
+214. data/remote/datasource/AccountingRemoteDataSource.kt ✅
+215. data/remote/datasource/AuditLogRemoteDataSource.kt ✅
+216. data/remote/datasource/CustomerRemoteDataSource.kt✅
+217. data/remote/datasource/EmployeeRemoteDataSource.kt ✅
+218. data/remote/datasource/ExpenseRemoteDataSource.kt✅
+219. data/remote/datasource/InventoryRemoteDataSource.kt ✅
+220. data/remote/datasource/PaymentRemoteDataSource.kt ✅
+221. data/remote/datasource/PaymentVerificationRemoteDataSource.kt ✅
+222. data/remote/datasource/PurchaseRemoteDataSource.kt ✅
+223. data/remote/datasource/DefaultReturnRemoteDataSource.kt✅
+224. data/remote/datasource/ReturnRemoteDataSource.kt ✅
+225. data/remote/datasource/SalesRemoteDataSource.kt✅
+226. data/remote/datasource/SupplierRemoteDataSource.kt✅
+
+17) البيانات - التحويلات
+227. data/mapper/AuthMapper.kt ✅
+228. data/mapper/AccountingMapper.kt ✅
+229. data/mapper/AuditLogMapper.kt ✅
+230. data/mapper/CustomerMapper.kt✅
+231. data/mapper/EmployeeMapper.kt ✅
+232. data/mapper/ExpenseMapper.kt ✅
+233. data/mapper/InvoiceMapper.kt ✅
+234. data/mapper/PaymentMapper.kt✅
+235. data/mapper/ProductMapper.kt✅
+236. data/mapper/PurchaseMapper.kt ✅
+237. data/mapper/ReturnMapper.kt✅
+238. data/mapper/StockMapper.kt ✅
+239. data/mapper/SupplierMapper.kt✅
+
+18) البيانات - المستودعات
+240. data/repository/AuthRepositoryImpl.kt ✅
+241. data/repository/RegisterRepositoryImpl.kt
+242. data/repository/AccountingRepositoryImpl.kt✅
+243. data/repository/AuditLogRepositoryImpl.kt✅
+244. data/repository/CustomerRepositoryImpl.kt ✅
+245. data/repository/EmployeeRepositoryImpl.kt ✅
+246. data/repository/ExpenseRepositoryImpl.kt ✅
+247. data/repository/InvoiceRepositoryImpl.kt ✅
+248. data/repository/PaymentRepositoryImpl.kt ✅
+249. data/repository/ProductRepositoryImpl.kt ✅
+250. data/repository/PurchaseRepositoryImpl.kt✅ 
+251. data/repository/ReportsRepositoryImpl.kt ✅
+252. data/repository/ReturnRepositoryImpl.kt✅
+253. data/repository/SalesRepositoryImpl.kt✅
+254. data/repository/StockRepositoryImpl.kt✅
+255. data/repository/SubscriptionRepositoryImpl.kt✅
+256. data/repository/SupplierRepositoryImpl.kt✅
+
+19) البيانات - العمال
+257. data/worker/SyncWorker.kt ✅
+258. data/worker/WorkerScheduler.kt✅
+259. data/worker/InventorySyncWorker.kt ✅
+260. data/worker/InvoiceSyncWorker.kt ✅
+261. data/worker/PaymentSyncWorker.kt ✅
+262. data/worker/PurchaseSyncWorker.kt ✅
+263. data/worker/ReturnSyncWorker.kt✅
+
+
+---
+
+20) DI 
+264. di/DispatcherModule.kt ✅
+265. di/NetworkModule.kt✅
+266. di/DatabaseModule.kt✅
+267. di/SecurityModule.kt✅
+268. di/AuthModule.kt ✅
+269. di/PaymentModule.kt ✅
+270. di/AuditLogModule.kt ✅
+271. di/RepositoryModule.kt ✅
+272. di/AppModule.kt✅
+
+
+---
+
+21) الواجهة - الأساس 
+273. ui/theme/Color.kt ✅
+274. ui/theme/Dimens.kt ✅
+275. ui/theme/Shape.kt ✅
+276. ui/theme/Type.kt✅
+277. ui/theme/Theme.kt ✅
+278. ui/components/LoadingIndicator.kt✅
+279. ui/components/ErrorState.kt ✅
+280. ui/components/AppTextField.kt✅
+281. ui/components/AppButton.kt ✅
+282. ui/components/AppDialog.kt ✅
+283. ui/components/AppTopBar.kt ✅
+284. ui/components/SubscriptionWarningBanner.kt✅
+285. ui/components/SubscriptionExpiredDialog.kt✅
+286. ui/navigation/ScreenRoutes.kt✅
+287. ui/navigation/NavigationActions.kt ✅
+288. ui/navigation/AccessControl.kt✅
+289. ui/navigation/AuthNavGraph.kt ✅
+290. ui/navigation/AppNavGraph.kt✅
+
+22) الواجهة- auth 
+291. ui/features/auth/LoginUiState.kt ✅
+292. ui/features/auth/LoginUiEvent.kt ✅
+293. ui/features/auth/LoginViewModel.kt✅
+294. ui/features/auth/LoginScreen.kt ✅
+295. ui/features/auth/RegisterUiState.kt✅
+296. ui/features/auth/RegisterUiEvent.kt✅
+297. ui/features/auth/RegisterViewModel.kt ✅
+298. ui/features/auth/RegisterScreen.kt ✅
+299. ui/features/auth/ForgotPasswordUiState.kt✅
+300. ui/features/auth/ForgotPasswordUiEvent.kt✅
+301. ui/features/auth/ForgotPasswordViewModel.kt✅
+302. ui/features/auth/ForgotPasswordScreen.kt✅
+
+23) الواجهة - باقي الشاشات
+303. ui/features/subscription/PlanSelectionScreen.kt ✅
+304. ui/features/dashboard/DashboardUiState.kt✅
+305. ui/features/dashboard/DashboardUiEvent.kt✅
+306. ui/features/dashboard/DashboardViewModel.kt✅
+307. ui/features/dashboard/DashboardScreen.kt✅
+308. ui/features/sales/SalesUiState.kt✅
+309. ui/features/sales/SalesUiEvent.kt ✅
+310. ui/features/sales/SalesViewModel.kt 
+311. ui/features/sales/SalesScreen.kt 
+312. ui/features/inventory/InventoryUiState.kt
+313. ui/features/inventory/InventoryUiEvent.kt 
+314. ui/features/inventory/InventoryViewModel.kt
+315. ui/features/inventory/InventoryScreen.kt 
+316. ui/features/purchases/PurchasesUiState.kt 
+317. ui/features/purchases/PurchasesUiEvent.kt 
+318. ui/features/purchases/PurchasesViewModel.kt
+319. ui/features/purchases/PurchasesScreen.kt
+320. ui/features/returns/ReturnsUiState.kt
+321. ui/features/returns/ReturnsUiEvent.kt
+322. ui/features/returns/ReturnsViewModel.kt 
+323. ui/features/returns/ReturnsScreen.kt 
+324. ui/features/customers/CustomersUiState.kt 
+325. ui/features/customers/CustomersUiEvent.kt 
+326. ui/features/customers/CustomersViewModel.kt
+327. ui/features/customers/CustomersScreen.kt
+328. ui/features/suppliers/SuppliersUiState.kt 
+329. ui/features/suppliers/SuppliersUiEvent.kt 
+330. ui/features/suppliers/SuppliersViewModel.kt
+331. ui/features/suppliers/SuppliersScreen.kt
+332. ui/features/expenses/ExpensesUiState.kt
+333. ui/features/expenses/ExpensesUiEvent.kt
+334. ui/features/expenses/ExpensesViewModel.kt
+335. ui/features/expenses/ExpensesScreen.kt
+336. ui/features/accounting/AccountingUiState.kt
+337. ui/features/accounting/AccountingUiEvent.kt
+338. ui/features/accounting/AccountingViewModel.kt 
+339. ui/features/accounting/AccountingScreen.kt
+340. ui/features/reports/ReportsUiState.kt 
+341. ui/features/reports/ReportsUiEvent.kt 
+342. ui/features/reports/ReportsViewModel.kt
+343. ui/features/reports/ReportsScreen.kt
+344. ui/features/payments/PaymentsUiState.kt 
+345. ui/features/payments/PaymentsUiEvent.kt
+346. ui/features/payments/PaymentsViewModel.kt
+347. ui/features/payments/PaymentVerificationDialog.kt 
+348. ui/features/payments/PaymentsScreen.kt 
+349. ui/features/payments/RefundScreen.kt
+350. ui/features/security/SecurityUiState.kt 
+351. ui/features/security/SecurityUiEvent.kt
+352. ui/features/security/SecurityViewModel.kt
+353. ui/features/security/SecurityScreen.kt 
+354. ui/features/settings/SettingsUiState.kt 
+355. ui/features/settings/SettingsUiEvent.kt 
+356. ui/features/settings/SettingsViewModel.kt
+357. ui/features/settings/SettingsScreen.kt
+
+24) جذر الواجهة 
+358. ui/ImdadPorRoot.kt
+
+25) ملفات التشغيل
+359. ImdadApplication.kt
+360. ImdadPorApp.kt 
+361. MainActivity.kt
