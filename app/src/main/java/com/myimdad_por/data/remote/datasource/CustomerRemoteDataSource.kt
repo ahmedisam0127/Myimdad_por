@@ -13,14 +13,14 @@ import retrofit2.Response
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
-
+import javax.inject.Inject
 /**
  * Remote datasource dedicated to customer operations.
  *
  * It keeps Retrofit details out of repositories and converts every transport
  * failure into a stable domain-friendly error model.
  */
-class CustomerRemoteDataSource(
+class CustomerRemoteDataSource @Inject constructor(
     private val apiService: CustomerApiService
 ) {
 

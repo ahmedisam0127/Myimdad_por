@@ -13,8 +13,9 @@ import retrofit2.Response
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import javax.inject.Inject
 
-class DefaultReturnRemoteDataSource(
+class DefaultReturnRemoteDataSource @Inject constructor(
     private val apiService: ReturnApiService
 ) : ReturnRemoteDataSource {
 

@@ -13,8 +13,8 @@ import retrofit2.Response
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
-
-class PurchaseRemoteDataSource(
+import javax.inject.Inject
+class PurchaseRemoteDataSource @Inject constructor(
     private val apiService: PurchaseApiService
 ) {
 

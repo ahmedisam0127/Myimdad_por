@@ -2,1028 +2,672 @@
 Search Path: /storage/emulated/0/AndroidIDEProjects/Myimdad_por/app/src/main/java/com/myimdad_por
 
 ------------------------------
-FILE: BaseViewModel.kt
+FILE: DashboardRepository.kt
 ------------------------------
-package com.myimdad_por.core.base
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import com.myimdad_por.core.dispatchers.AppDispatchers
-import com.myimdad_por.core.dispatchers.DefaultAppDispatchers
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-abstract class BaseViewModel<S>(
-    protected val dispatchers: AppDispatchers = DefaultAppDispatchers
-) : ViewModel() {
-    private val _uiState = MutableStateFlow<UiState<S>>(UiState.Idle)
-    val uiState: StateFlow<UiState<S>> = _uiState.asStateFlow()
-    private val _uiEvent = MutableSharedFlow<UiEvent>(
-        replay = 0,
-        extraBufferCapacity = 1,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST
-    )
-    val uiEvent: SharedFlow<UiEvent> = _uiEvent.asSharedFlow()
-    protected val currentState: UiState<S>
-        get() = _uiState.value
-    protected val currentData: S?
-        get() = (currentState as? UiState.Success)?.data
-    protected fun setState(state: UiState<S>) {
-        _uiState.value = state
-    }
-    protected fun updateState(reducer: (UiState<S>) -> UiState<S>) {
-        _uiState.update(reducer)
-    }
-    protected fun setLoading() {
-        _uiState.value = UiState.Loading
-    }
-    protected fun setSuccess(data: S) {
-        _uiState.value = UiState.Success(data)
-    }
-    protected fun setError(
-        message: String,
-        throwable: Throwable? = null,
-        code: Int? = null
-    ) {
-        _uiState.value = UiState.Error(
-            message = message,
-            throwable = throwable,
-            code = code
-        )
-    }
-    protected fun setEmpty() {
-        _uiState.value = UiState.Empty
-    }
-    protected fun setIdle() {
-        _uiState.value = UiState.Idle
-    }
-    protected fun clearError() {
-        if (currentState is UiState.Error) {
-            setIdle()
-        }
-    }
-    protected fun sendEvent(event: UiEvent) {
-        if (!_uiEvent.tryEmit(event)) {
-            viewModelScope.launch(dispatchers.main) {
-                _uiEvent.emit(event)
-            }
-        }
-    }
-    protected fun launch(
-        dispatcher: CoroutineDispatcher = dispatchers.main,
-        onError: ((Throwable) -> Unit)? = null,
-        block: suspend () -> Unit
-    ): Job {
-        return viewModelScope.launch(dispatcher) {
-            try {
-                block()
-            } catch (throwable: Throwable) {
-                if (throwable is CancellationException) throw throwable
-                onError?.invoke(throwable)
-            }
-        }
-    }
-    protected fun launchRequest(
-        loading: Boolean = true,
-        dispatcher: CoroutineDispatcher = dispatchers.io,
-        onErrorMessage: String = "حدث خطأ غير متوقع",
-        block: suspend () -> S
-    ): Job {
-        return launch(
-            dispatcher = dispatchers.main,
-            onError = { throwable ->
-                setError(
-                    message = throwable.message ?: onErrorMessage,
-                    throwable = throwable
-                )
-            }
-        ) {
-            if (loading) setLoading()
-            val result = withContext(dispatcher) {
-                block()
-            }
-            setSuccess(result)
-        }
-    }
-    protected fun launchAction(
-        loading: Boolean = true,
-        dispatcher: CoroutineDispatcher = dispatchers.io,
-        onSuccessEvent: UiEvent? = null,
-        onErrorMessage: String = "حدث خطأ غير متوقع",
-        block: suspend () -> Unit
-    ): Job {
-        return launch(
-            dispatcher = dispatchers.main,
-            onError = { throwable ->
-                setError(
-                    message = throwable.message ?: onErrorMessage,
-                    throwable = throwable
-                )
-            }
-        ) {
-            if (loading) setLoading()
-            withContext(dispatcher) {
-                block()
-            }
-            onSuccessEvent?.let { sendEvent(it) }
-            setIdle()
-        }
-    }
-    protected fun launchStateful(
-        dispatcher: CoroutineDispatcher = dispatchers.io,
-        onErrorMessage: String = "حدث خطأ غير متوقع",
-        block: suspend () -> UiState<S>
-    ): Job {
-        return launch(
-            dispatcher = dispatchers.main,
-            onError = { throwable ->
-                setError(
-                    message = throwable.message ?: onErrorMessage,
-                    throwable = throwable
-                )
-            }
-        ) {
-            setLoading()
-            val newState = withContext(dispatcher) {
-                block()
-            }
-            setState(newState)
-        }
-    }
-}
+
 
 ------------------------------
-FILE: Customer.kt
+FILE: Dashboard.kt
 ------------------------------
 package com.myimdad_por.domain.model
 import java.math.BigDecimal
-import java.util.UUID
-data class Customer(
-    val id: String = UUID.randomUUID().toString(),
-    val code: String? = null,
-    val fullName: String,
-    val tradeName: String? = null,
-    val phoneNumber: String? = null,
-    val email: String? = null,
-    val address: String? = null,
-    val city: String? = null,
-    val country: String? = null,
-    val taxNumber: String? = null,
-    val nationalId: String? = null,
-    val creditLimit: BigDecimal = BigDecimal.ZERO,
-    val outstandingBalance: BigDecimal = BigDecimal.ZERO,
-    val isActive: Boolean = true,
-    val createdAtMillis: Long = System.currentTimeMillis(),
-    val updatedAtMillis: Long = System.currentTimeMillis(),
-    val lastPurchaseAtMillis: Long? = null,
-    val metadata: Map<String, String> = emptyMap()
+import java.math.RoundingMode
+data class Dashboard(
+    val overview: DashboardOverview = DashboardOverview(),
+    val sales: DashboardSalesSummary = DashboardSalesSummary(),
+    val inventory: DashboardInventorySummary = DashboardInventorySummary(),
+    val customers: DashboardCustomerSummary = DashboardCustomerSummary(),
+    val financial: DashboardFinancialSummary = DashboardFinancialSummary(),
+    val alerts: List<DashboardAlert> = emptyList(),
+    val quickActions: List<DashboardQuickAction> = emptyList(),
+    val lastUpdatedAtEpochMillis: Long? = null
 ) {
-    init {
-        require(id.isNotBlank()) { "id cannot be blank." }
-        require(fullName.isNotBlank()) { "fullName cannot be blank." }
-        require(creditLimit >= BigDecimal.ZERO) { "creditLimit cannot be negative." }
-        require(outstandingBalance >= BigDecimal.ZERO) { "outstandingBalance cannot be negative." }
-        require(createdAtMillis > 0L) { "createdAtMillis must be greater than zero." }
-        require(updatedAtMillis > 0L) { "updatedAtMillis must be greater than zero." }
-        require(updatedAtMillis >= createdAtMillis) {
-            "updatedAtMillis must be greater than or equal to createdAtMillis."
-        }
-        code?.let {
-            require(it.isNotBlank()) { "code cannot be blank when provided." }
-        }
-        tradeName?.let {
-            require(it.isNotBlank()) { "tradeName cannot be blank when provided." }
-        }
-        phoneNumber?.let {
-            require(it.isNotBlank()) { "phoneNumber cannot be blank when provided." }
-        }
-        email?.let {
-            require(it.isNotBlank()) { "email cannot be blank when provided." }
-        }
-        address?.let {
-            require(it.isNotBlank()) { "address cannot be blank when provided." }
-        }
-        city?.let {
-            require(it.isNotBlank()) { "city cannot be blank when provided." }
-        }
-        country?.let {
-            require(it.isNotBlank()) { "country cannot be blank when provided." }
-        }
-        taxNumber?.let {
-            require(it.isNotBlank()) { "taxNumber cannot be blank when provided." }
-        }
-        nationalId?.let {
-            require(it.isNotBlank()) { "nationalId cannot be blank when provided." }
-        }
-        lastPurchaseAtMillis?.let {
-            require(it > 0L) { "lastPurchaseAtMillis must be greater than zero when provided." }
-        }
-    }
-    val displayName: String
-        get() = tradeName?.trim().takeUnless { it.isNullOrBlank() } ?: fullName.trim()
-    val identifier: String
-        get() = code?.trim().takeUnless { it.isNullOrBlank() } ?: id
-    val availableCredit: BigDecimal
-        get() = (creditLimit - outstandingBalance).coerceAtLeast(BigDecimal.ZERO)
-    val hasDebt: Boolean
-        get() = outstandingBalance > BigDecimal.ZERO
-    val isCreditCustomer: Boolean
-        get() = creditLimit > BigDecimal.ZERO
-    val isOverLimit: Boolean
-        get() = outstandingBalance > creditLimit
-    fun canPlaceOnCredit(amount: BigDecimal): Boolean {
-        require(amount >= BigDecimal.ZERO) { "amount cannot be negative." }
-        return availableCredit >= amount
-    }
+    val hasAlerts: Boolean
+        get() = alerts.isNotEmpty()
+    val hasQuickActions: Boolean
+        get() = quickActions.isNotEmpty()
+    val isFresh: Boolean
+        get() = lastUpdatedAtEpochMillis != null
 }
-
-------------------------------
-FILE: PaymentMethod.kt
-------------------------------
-package com.myimdad_por.domain.model
-import java.math.BigDecimal
-import java.util.UUID
-sealed class PaymentMethod(
-    open val id: String,
-    open val name: String,
-    open val type: PaymentMethodType,
-    open val providerName: String? = null,
-    open val requiresReference: Boolean,
-    open val extraFees: BigDecimal = BigDecimal.ZERO,
-    open val supportedCurrencies: Set<CurrencyCode> = setOf(CurrencyCode.SDG, CurrencyCode.EGP),
-    open val isActive: Boolean = true
+data class DashboardOverview(
+    val title: String = "لوحة التحكم",
+    val subtitle: String? = null,
+    val greeting: String? = null,
+    val totalMetrics: Int = 0,
+    val positiveMetrics: Int = 0,
+    val negativeMetrics: Int = 0
 ) {
-    init {
-        require(id.isNotBlank()) { "id cannot be blank" }
-        require(name.isNotBlank()) { "name cannot be blank" }
-        require(extraFees >= BigDecimal.ZERO) { "extraFees cannot be negative" }
-        require(supportedCurrencies.isNotEmpty()) { "supportedCurrencies cannot be empty" }
-        providerName?.let {
-            require(it.isNotBlank()) { "providerName cannot be blank when provided" }
-        }
-    }
-    val displayName: String
-        get() = providerName?.trim().takeUnless { it.isNullOrBlank() } ?: name.trim()
-    fun supportsCurrency(currencyCode: CurrencyCode): Boolean {
-        return currencyCode in supportedCurrencies
-    }
-    fun isElectronic(): Boolean {
-        return type != PaymentMethodType.CASH
-    }
-    object CASH : PaymentMethod(
-        id = "cash",
-        name = "Cash",
-        type = PaymentMethodType.CASH,
-        providerName = null,
-        requiresReference = false,
-        extraFees = BigDecimal.ZERO
-    )
-    object BANK_TRANSFER : PaymentMethod(
-        id = "bank_transfer",
-        name = "Bank Transfer",
-        type = PaymentMethodType.BANK_TRANSFER,
-        providerName = null,
-        requiresReference = true,
-        extraFees = BigDecimal.ZERO
-    )
-    object WALLET : PaymentMethod(
-        id = "wallet",
-        name = "Wallet",
-        type = PaymentMethodType.WALLET,
-        providerName = null,
-        requiresReference = true,
-        extraFees = BigDecimal.ZERO
-    )
-    object POS : PaymentMethod(
-        id = "pos",
-        name = "POS",
-        type = PaymentMethodType.POS,
-        providerName = null,
-        requiresReference = true,
-        extraFees = BigDecimal.ZERO
-    )
-    object CHEQUE : PaymentMethod(
-        id = "cheque",
-        name = "Cheque",
-        type = PaymentMethodType.CHEQUE,
-        providerName = null,
-        requiresReference = true,
-        extraFees = BigDecimal.ZERO
-    )
-    data class Custom(
-        override val id: String = UUID.randomUUID().toString(),
-        override val name: String,
-        override val type: PaymentMethodType,
-        override val providerName: String? = null,
-        override val requiresReference: Boolean = false,
-        override val extraFees: BigDecimal = BigDecimal.ZERO,
-        override val supportedCurrencies: Set<CurrencyCode> = setOf(CurrencyCode.SDG, CurrencyCode.EGP),
-        override val isActive: Boolean = true
-    ) : PaymentMethod(
-        id = id,
-        name = name,
-        type = type,
-        providerName = providerName,
-        requiresReference = requiresReference,
-        extraFees = extraFees,
-        supportedCurrencies = supportedCurrencies,
-        isActive = isActive
-    )
+    val hasPerformanceData: Boolean
+        get() = totalMetrics > 0
 }
-enum class PaymentMethodType {
-    CASH,
-    BANK_TRANSFER,
-    WALLET,
-    POS,
-    CHEQUE,
-    OTHER
-}
-enum class CurrencyCode(
-    val code: String,
-    val displayName: String,
-    val symbol: String,
-    val decimalPlaces: Int
+data class DashboardSalesSummary(
+    val todaySalesCount: Int = 0,
+    val todayRevenue: BigDecimal = BigDecimal.ZERO,
+    val monthSalesCount: Int = 0,
+    val monthRevenue: BigDecimal = BigDecimal.ZERO,
+    val pendingInvoicesCount: Int = 0,
+    val returnsCount: Int = 0,
+    val topSellingProductName: String? = null,
+    val growthRatePercent: BigDecimal? = null
 ) {
-    SDG(
-        code = "SDG",
-        displayName = "جنيه سوداني",
-        symbol = "ج.س",
-        decimalPlaces = 2
-    ),
-    EGP(
-        code = "EGP",
-        displayName = "جنيه مصري",
-        symbol = "ج.م",
-        decimalPlaces = 2
-    )
+    val hasGrowthRate: Boolean
+        get() = growthRatePercent != null
 }
-
-------------------------------
-FILE: Product.kt
-------------------------------
-package com.myimdad_por.domain.model
-import java.math.BigDecimal
-data class Product(
-    val barcode: String,
-    val name: String,
-    val price: BigDecimal,
-    val unitOfMeasure: UnitOfMeasure = UnitOfMeasure.UNIT,
-    val displayName: String? = null,
+data class DashboardInventorySummary(
+    val productsCount: Int = 0,
+    val lowStockCount: Int = 0,
+    val outOfStockCount: Int = 0,
+    val totalStockValue: BigDecimal = BigDecimal.ZERO,
+    val reservedItemsCount: Int = 0,
+    val mostCriticalProductName: String? = null
+) {
+    val hasStockRisk: Boolean
+        get() = lowStockCount > 0 || outOfStockCount > 0
+}
+data class DashboardCustomerSummary(
+    val customersCount: Int = 0,
+    val newCustomersCount: Int = 0,
+    val activeCustomersCount: Int = 0,
+    val dueCustomersCount: Int = 0,
+    val topCustomerName: String? = null,
+    val averageOrderValue: BigDecimal = BigDecimal.ZERO
+)
+data class DashboardFinancialSummary(
+    val totalCashIn: BigDecimal = BigDecimal.ZERO,
+    val totalCashOut: BigDecimal = BigDecimal.ZERO,
+    val netBalance: BigDecimal = BigDecimal.ZERO,
+    val receivables: BigDecimal = BigDecimal.ZERO,
+    val payables: BigDecimal = BigDecimal.ZERO,
+    val profitEstimate: BigDecimal? = null,
+    val currencyCode: String = "SDG"
+) {
+    val hasProfitData: Boolean
+        get() = profitEstimate != null
+}
+data class DashboardMetric(
+    val key: String,
+    val label: String,
+    val value: BigDecimal,
+    val formattedValue: String? = null,
+    val deltaPercent: BigDecimal? = null,
+    val deltaLabel: String? = null,
+    val isPositiveTrend: Boolean = true,
+    val accentKey: String? = null
+) {
+    val hasDelta: Boolean
+        get() = deltaPercent != null
+    fun normalizedValue(scale: Int = 2): BigDecimal = value.setScale(scale, RoundingMode.HALF_UP)
+}
+enum class DashboardAlertLevel {
+    Info,
+    Warning,
+    Critical
+}
+data class DashboardAlert(
+    val id: String,
+    val title: String,
+    val message: String,
+    val level: DashboardAlertLevel = DashboardAlertLevel.Info,
+    val actionLabel: String? = null,
+    val targetRoute: String? = null,
+    val isDismissible: Boolean = true
+) {
+    val hasAction: Boolean
+        get() = !actionLabel.isNullOrBlank() && !targetRoute.isNullOrBlank()
+}
+data class DashboardQuickAction(
+    val id: String,
+    val title: String,
     val description: String? = null,
-    val isActive: Boolean = true
+    val iconName: String? = null,
+    val route: String? = null,
+    val isEnabled: Boolean = true,
+    val requiresPermission: String? = null
 ) {
-    init {
-        require(isValidBarcode(barcode)) { "barcode is invalid" }
-        require(name.isNotBlank()) { "name cannot be blank" }
-        require(price >= BigDecimal.ZERO) { "price cannot be negative" }
-        require(price.scale() <= 10) { "price scale is too large" }
-    }
-    val normalizedBarcode: String
-        get() = barcode.trim()
-    val effectiveName: String
-        get() = displayName?.trim().takeUnless { it.isNullOrBlank() } ?: name.trim()
-    val isAvailableForSale: Boolean
-        get() = isActive
-    companion object {
-        private fun isValidBarcode(value: String): Boolean {
-            val normalized = value.trim()
-            if (normalized.isEmpty()) return false
-            if (normalized.length !in 4..64) return false
-            return normalized.all { ch ->
-                ch.isLetterOrDigit() || ch == '-' || ch == '_' || ch == '.'
-            }
-        }
-    }
+    val canNavigate: Boolean
+        get() = isEnabled && !route.isNullOrBlank()
+}
+fun BigDecimal.money(scale: Int = 2): BigDecimal = setScale(scale, RoundingMode.HALF_UP)
+
+------------------------------
+FILE: DashboardRepository.kt
+------------------------------
+package com.myimdad_por.domain.repository
+import com.myimdad_por.domain.model.Dashboard
+import kotlinx.coroutines.flow.Flow
+interface DashboardRepository {
+    suspend fun getDashboard(forceRefresh: Boolean = false): Result<Dashboard>
+    suspend fun refreshDashboard(): Result<Dashboard>
+    fun observeDashboard(): Flow<Dashboard>
+    suspend fun getCachedDashboard(): Dashboard?
+    suspend fun markAlertAsRead(alertId: String): Result<Unit>
+    suspend fun dismissAlert(alertId: String): Result<Unit>
 }
 
 ------------------------------
-FILE: Sale.kt
+FILE: GetAnalyticsData.kt
 ------------------------------
-package com.myimdad_por.domain.model
+package com.myimdad_por.domain.usecase.dashboard
+import com.myimdad_por.domain.model.Dashboard
+import com.myimdad_por.domain.model.DashboardAlert
+import com.myimdad_por.domain.model.DashboardAlertLevel
+import com.myimdad_por.domain.model.DashboardMetric
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.time.LocalDateTime
-import java.util.UUID
-data class Sale(
-    val id: String = UUID.randomUUID().toString(),
-    val invoiceNumber: String,
-    val customerId: String? = null,
-    val employeeId: String,
-    val items: List<SaleItem>,
-    val paidAmount: BigDecimal = BigDecimal.ZERO,
-    val saleStatus: SaleStatus = SaleStatus.COMPLETED,
-    val createdAt: LocalDateTime = LocalDateTime.now(),
-    val note: String? = null
-) {
-    init {
-        require(invoiceNumber.isNotBlank()) { "invoiceNumber cannot be blank" }
-        require(employeeId.isNotBlank()) { "employeeId cannot be blank" }
-        require(items.isNotEmpty()) { "items cannot be empty" }
-        require(paidAmount >= BigDecimal.ZERO) { "paidAmount cannot be negative" }
-    }
-    val subtotalAmount: BigDecimal
-        get() = items.fold(BigDecimal.ZERO) { acc: BigDecimal, item: SaleItem ->
-            acc.add(item.calculateSubtotal())
-        }.money()
-    val taxAmount: BigDecimal
-        get() = items.fold(BigDecimal.ZERO) { acc: BigDecimal, item: SaleItem ->
-            acc.add(item.netTaxAmount)
-        }.money()
-    val discountAmount: BigDecimal
-        get() = items.fold(BigDecimal.ZERO) { acc: BigDecimal, item: SaleItem ->
-            acc.add(item.netDiscountAmount)
-        }.money()
-    val totalAmount: BigDecimal
-        get() = subtotalAmount
-            .add(taxAmount)
-            .subtract(discountAmount)
-            .money()
-    val remainingAmount: BigDecimal
-        get() {
-            val remaining = totalAmount.subtract(paidAmount)
-            return if (remaining > BigDecimal.ZERO) remaining.money() else BigDecimal.ZERO.setScale(2)
+class GetAnalyticsData {
+    operator fun invoke(dashboard: Dashboard?): AnalyticsData {
+        if (dashboard == null) {
+            return AnalyticsData()
         }
-    val paymentStatus: PaymentStatus
-        get() = when {
-            totalAmount <= BigDecimal.ZERO -> PaymentStatus.PAID
-            remainingAmount == BigDecimal.ZERO && paidAmount > BigDecimal.ZERO -> PaymentStatus.PAID
-            paidAmount > BigDecimal.ZERO -> PaymentStatus.PARTIALLY_PAID
-            else -> PaymentStatus.PENDING
-        }
-    fun isFullyPaid(): Boolean = paymentStatus == PaymentStatus.PAID
-    fun hasReturns(): Boolean = items.any { it.isReturn }
-    fun containsDiscounts(): Boolean = items.any { it.hasDiscount }
-    fun containsTaxedItems(): Boolean = items.any { it.hasTax }
-    fun withAdditionalPayment(amount: BigDecimal): Sale {
-        require(amount >= BigDecimal.ZERO) { "amount cannot be negative" }
-        return copy(paidAmount = paidAmount.add(amount).money())
-    }
-}
-enum class SaleStatus {
-    COMPLETED,
-    CANCELLED,
-    REFUNDED
-}
-private fun BigDecimal.money(): BigDecimal = this.setScale(2, RoundingMode.HALF_UP)
-
-------------------------------
-FILE: SaleItem.kt
-------------------------------
-package com.myimdad_por.domain.model
-import java.math.BigDecimal
-import java.math.RoundingMode
-import java.util.UUID
-data class SaleItem(
-    val id: String = UUID.randomUUID().toString(),
-    val saleId: String? = null,
-    val productId: String,
-    val productName: String,
-    val unit: UnitOfMeasure = UnitOfMeasure.UNIT,
-    val quantity: BigDecimal,
-    val unitPrice: BigDecimal,
-    val taxAmount: BigDecimal = BigDecimal.ZERO,
-    val discountAmount: BigDecimal = BigDecimal.ZERO,
-    val isReturn: Boolean = false,
-    val note: String? = null
-) {
-    init {
-        require(productId.isNotBlank()) { "productId cannot be blank" }
-        require(productName.isNotBlank()) { "productName cannot be blank" }
-        require(quantity > BigDecimal.ZERO) { "quantity must be greater than zero" }
-        require(unitPrice >= BigDecimal.ZERO) { "unitPrice cannot be negative" }
-        require(taxAmount >= BigDecimal.ZERO) { "taxAmount cannot be negative" }
-        require(discountAmount >= BigDecimal.ZERO) { "discountAmount cannot be negative" }
-        if (!unit.isDecimalAllowed) {
-            require(quantity.stripTrailingZeros().scale() <= 0) {
-                "Unit ${unit.name} does not allow decimal quantities"
-            }
-        }
-    }
-    val signedQuantity: BigDecimal
-        get() = if (isReturn) quantity.negate() else quantity
-    fun calculateSubtotal(): BigDecimal {
-        val subtotal = quantity.multiply(unitPrice)
-        return if (isReturn) subtotal.negate().money() else subtotal.money()
-    }
-    val netTaxAmount: BigDecimal
-        get() = if (isReturn) taxAmount.negate().money() else taxAmount.money()
-    val netDiscountAmount: BigDecimal
-        get() = if (isReturn) discountAmount.negate().money() else discountAmount.money()
-    val totalPrice: BigDecimal
-        get() = calculateSubtotal()
-            .add(netTaxAmount)
-            .subtract(netDiscountAmount)
-            .money()
-    val hasTax: Boolean
-        get() = taxAmount > BigDecimal.ZERO
-    val hasDiscount: Boolean
-        get() = discountAmount > BigDecimal.ZERO
-}
-private fun BigDecimal.money(): BigDecimal = this.setScale(2, RoundingMode.HALF_UP)
-
-------------------------------
-FILE: GetCustomersUseCase.kt
-------------------------------
-package com.myimdad_por.domain.usecase
-import com.myimdad_por.domain.model.Customer
-import com.myimdad_por.domain.repository.CustomerRepository
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
-import javax.inject.Inject
-data class CustomerQuery(
-    val id: String? = null,
-    val code: String? = null,
-    val email: String? = null,
-    val text: String? = null,
-    val onlyWithDebt: Boolean = false,
-    val onlyOverLimit: Boolean = false
-)
-class GetCustomersUseCase @Inject constructor(
-    private val customerRepository: CustomerRepository
-) {
-    suspend operator fun invoke(query: CustomerQuery = CustomerQuery()): List<Customer> {
-        query.id?.trim()?.takeIf { it.isNotBlank() }?.let {
-            return listOfNotNull(customerRepository.getCustomerById(it))
-        }
-        query.code?.trim()?.takeIf { it.isNotBlank() }?.let {
-            return listOfNotNull(customerRepository.getCustomerByCode(it))
-        }
-        query.email?.trim()?.takeIf { it.isNotBlank() }?.let {
-            return listOfNotNull(customerRepository.getCustomerByEmail(it))
-        }
-        if (query.onlyWithDebt) {
-            return customerRepository.getCustomersWithDebt()
-        }
-        if (query.onlyOverLimit) {
-            return customerRepository.getCustomersOverLimit()
-        }
-        query.text?.trim()?.takeIf { it.isNotBlank() }?.let {
-            return customerRepository.searchCustomers(it)
-        }
-        return customerRepository.observeAllCustomers().first()
-    }
-    fun observeAll(): Flow<List<Customer>> {
-        return customerRepository.observeAllCustomers()
-    }
-    fun observeById(id: String): Flow<Customer?> {
-        require(id.isNotBlank()) { "id cannot be blank" }
-        return customerRepository.observeCustomerById(id)
-    }
-    fun observeByEmail(email: String): Flow<Customer?> {
-        require(email.isNotBlank()) { "email cannot be blank" }
-        return customerRepository.observeCustomerByEmail(email)
-    }
-    suspend fun getById(id: String): Customer? {
-        require(id.isNotBlank()) { "id cannot be blank" }
-        return customerRepository.getCustomerById(id)
-    }
-    suspend fun getByCode(code: String): Customer? {
-        require(code.isNotBlank()) { "code cannot be blank" }
-        return customerRepository.getCustomerByCode(code)
-    }
-    suspend fun getByEmail(email: String): Customer? {
-        require(email.isNotBlank()) { "email cannot be blank" }
-        return customerRepository.getCustomerByEmail(email)
-    }
-    suspend fun search(text: String): List<Customer> {
-        require(text.isNotBlank()) { "text cannot be blank" }
-        return customerRepository.searchCustomers(text)
-    }
-    suspend fun countAll(): Long {
-        return customerRepository.countCustomers()
-    }
-    suspend fun countActive(): Long {
-        return customerRepository.countActiveCustomers()
-    }
-}
-
-------------------------------
-FILE: GetInventoryUseCase.kt
-------------------------------
-package com.myimdad_por.domain.usecase
-import com.myimdad_por.domain.model.StockItem
-import com.myimdad_por.domain.model.UnitOfMeasure
-import com.myimdad_por.domain.repository.StockRepository
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
-import javax.inject.Inject
-data class InventoryQuery(
-    val query: String? = null,
-    val location: String? = null,
-    val unitOfMeasure: UnitOfMeasure? = null,
-    val barcode: String? = null,
-    val lowStockOnly: Boolean = false,
-    val expiredOnly: Boolean = false,
-    val includeOutOfStock: Boolean = true
-)
-data class InventorySnapshot(
-    val items: List<StockItem>,
-    val totalItems: Int,
-    val totalQuantityByLocation: Double? = null
-)
-class GetInventoryUseCase @Inject constructor(
-    private val stockRepository: StockRepository
-) {
-    suspend operator fun invoke(query: InventoryQuery = InventoryQuery()): List<StockItem> {
-        query.barcode?.trim()?.takeIf { it.isNotBlank() }?.let {
-            return listOfNotNull(stockRepository.getStockByBarcode(it))
-                .filterByFlags(query)
-        }
-        var items = stockRepository.getStockItems(
-            query = query.query,
-            location = query.location,
-            unitOfMeasure = query.unitOfMeasure
+        val metrics = buildMetrics(dashboard)
+        val alerts = dashboard.alerts
+        val summary = buildSummary(dashboard, metrics, alerts)
+        return AnalyticsData(
+            summary = summary,
+            metrics = metrics,
+            alerts = alerts,
+            kpis = metrics.take(6),
+            riskAlerts = alerts.filter { it.level != DashboardAlertLevel.Info },
+            salesTrend = buildTrendSeries(
+                current = dashboard.sales.todayRevenue,
+                monthly = dashboard.sales.monthRevenue,
+                positiveLabel = "إيرادات",
+                negativeLabel = "انخفاض"
+            ),
+            inventoryTrend = buildTrendSeries(
+                current = dashboard.inventory.productsCount.toBigDecimal(),
+                monthly = dashboard.inventory.lowStockCount.toBigDecimal(),
+                positiveLabel = "متاح",
+                negativeLabel = "منخفض"
+            ),
+            customerTrend = buildTrendSeries(
+                current = dashboard.customers.customersCount.toBigDecimal(),
+                monthly = dashboard.customers.newCustomersCount.toBigDecimal(),
+                positiveLabel = "عملاء",
+                negativeLabel = "جدد"
+            )
         )
-        if (query.lowStockOnly) {
-            val lowStockBarcodes = stockRepository.observeLowStockItems().first()
-                .map { it.normalizedBarcode }
-                .toSet()
-            items = items.filter { it.normalizedBarcode in lowStockBarcodes }
-        }
-        if (query.expiredOnly) {
-            val today = java.time.LocalDate.now()
-            items = items.filter { it.isExpired(today) }
-        }
-        if (!query.includeOutOfStock) {
-            items = items.filter { !it.isOutOfStock }
-        }
-        return items
     }
-    fun observeAll(): Flow<List<StockItem>> = stockRepository.observeAllStock()
-    fun observeByBarcode(barcode: String): Flow<StockItem?> {
-        require(barcode.isNotBlank()) { "barcode cannot be blank" }
-        return stockRepository.observeStockByBarcode(barcode)
+    private fun buildSummary(
+        dashboard: Dashboard,
+        metrics: List<DashboardMetric>,
+        alerts: List<DashboardAlert>
+    ): AnalyticsSummary {
+        val totalPositive = metrics.count { it.isPositiveTrend }
+        val totalNegative = metrics.count { !it.isPositiveTrend }
+        val highPriorityAlerts = alerts.count { it.level == DashboardAlertLevel.Warning || it.level == DashboardAlertLevel.Critical }
+        return AnalyticsSummary(
+            title = dashboard.overview.title,
+            subtitle = dashboard.overview.subtitle,
+            totalMetrics = metrics.size,
+            positiveMetrics = totalPositive,
+            negativeMetrics = totalNegative,
+            totalAlerts = alerts.size,
+            criticalAlerts = highPriorityAlerts,
+            hasSalesGrowth = dashboard.sales.growthRatePercent?.let { it > BigDecimal.ZERO } == true,
+            hasStockRisk = dashboard.inventory.hasStockRisk,
+            hasProfitData = dashboard.financial.hasProfitData,
+            currencyCode = dashboard.financial.currencyCode
+        )
     }
-    fun observeByLocation(location: String): Flow<List<StockItem>> {
-        require(location.isNotBlank()) { "location cannot be blank" }
-        return stockRepository.observeStockByLocation(location)
-    }
-    fun observeLowStock(): Flow<List<StockItem>> = stockRepository.observeLowStockItems()
-    fun observeExpired(): Flow<List<StockItem>> = stockRepository.observeExpiredStockItems()
-    suspend fun getByBarcode(barcode: String): StockItem? {
-        require(barcode.isNotBlank()) { "barcode cannot be blank" }
-        return stockRepository.getStockByBarcode(barcode)
-    }
-    suspend fun countItems(): Long = stockRepository.countItems()
-    suspend fun countLowStockItems(): Long = stockRepository.countLowStockItems()
-    suspend fun countExpiredItems(today: java.time.LocalDate = java.time.LocalDate.now()): Long {
-        return stockRepository.countExpiredStockItems(today)
-    }
-    suspend fun getAvailableQuantity(barcode: String): Double {
-        require(barcode.isNotBlank()) { "barcode cannot be blank" }
-        return stockRepository.getAvailableQuantity(barcode)
-    }
-    suspend fun getTotalQuantityByLocation(location: String): Double {
-        require(location.isNotBlank()) { "location cannot be blank" }
-        return stockRepository.getTotalQuantityByLocation(location)
-    }
-    private fun List<StockItem>.filterByFlags(query: InventoryQuery): List<StockItem> {
-        val today = java.time.LocalDate.now()
-        return asSequence()
-            .filter { query.includeOutOfStock || !it.isOutOfStock }
-            .filter { !query.expiredOnly || it.isExpired(today) }
-            .toList()
-    }
-}
-
-------------------------------
-FILE: ProcessPaymentUseCase.kt
-------------------------------
-package com.myimdad_por.domain.usecase
-import com.myimdad_por.domain.model.CurrencyCode
-import com.myimdad_por.domain.model.PaymentRecord
-import com.myimdad_por.domain.model.PaymentVerification
-import com.myimdad_por.domain.repository.PaymentRepository
-import java.math.BigDecimal
-import javax.inject.Inject
-data class ProcessPaymentRequest(
-    val payment: PaymentRecord,
-    val paymentId: String? = null,
-    val verifyAfterProcess: Boolean = false,
-    val transactionId: String? = null,
-    val expectedAmount: BigDecimal? = null,
-    val expectedCurrency: CurrencyCode? = null,
-    val recordVerificationOnPayment: Boolean = true
-)
-data class ProcessPaymentResult(
-    val payment: PaymentRecord,
-    val verification: PaymentVerification? = null,
-    val verified: Boolean = false
-) {
-    val isVerified: Boolean
-        get() = verified && verification?.isSuccessful == true
-}
-class ProcessPaymentUseCase @Inject constructor(
-    private val paymentRepository: PaymentRepository,
-    private val verifyPaymentUseCase: VerifyPaymentUseCase
-) {
-    suspend operator fun invoke(request: ProcessPaymentRequest): Result<ProcessPaymentResult> {
-        return runCatching {
-            val processedPayment = paymentRepository
-                .processPayment(request.payment)
-                .getOrThrow()
-            val verification = resolveVerification(request, processedPayment)
-            ProcessPaymentResult(
-                payment = processedPayment,
-                verification = verification,
-                verified = verification?.isSuccessful == true
+    private fun buildMetrics(dashboard: Dashboard): List<DashboardMetric> {
+        return buildList {
+            add(
+                DashboardMetric(
+                    key = "today_sales_count",
+                    label = "مبيعات اليوم",
+                    value = dashboard.sales.todaySalesCount.toBigDecimal(),
+                    formattedValue = dashboard.sales.todaySalesCount.toString(),
+                    deltaPercent = dashboard.sales.growthRatePercent,
+                    deltaLabel = dashboard.sales.growthRatePercent?.let { "نمو" },
+                    isPositiveTrend = (dashboard.sales.growthRatePercent ?: BigDecimal.ZERO) >= BigDecimal.ZERO,
+                    accentKey = "sales"
+                )
             )
-        }
-    }
-    private suspend fun resolveVerification(
-        request: ProcessPaymentRequest,
-        processedPayment: PaymentRecord
-    ): PaymentVerification? {
-        if (!request.verifyAfterProcess) return null
-        val transactionId = request.transactionId?.trim().orEmpty()
-        if (transactionId.isBlank()) return null
-        val verificationResult = verifyPaymentUseCase(
-            VerifyPaymentRequest(
-                transactionId = transactionId,
-                paymentId = request.paymentId?.trim()?.takeIf { it.isNotBlank() },
-                expectedAmount = request.expectedAmount,
-                expectedCurrency = request.expectedCurrency,
-                recordVerification = request.recordVerificationOnPayment
+            add(
+                DashboardMetric(
+                    key = "today_revenue",
+                    label = "إيراد اليوم",
+                    value = dashboard.sales.todayRevenue.money(),
+                    formattedValue = dashboard.sales.todayRevenue.money().toPlainString(),
+                    isPositiveTrend = true,
+                    accentKey = "revenue"
+                )
             )
-        ).getOrNull() ?: return null
-        return verificationResult.verification
-    }
-    suspend fun quickPay(payment: PaymentRecord): Result<PaymentRecord> {
-        return paymentRepository.processPayment(payment)
-    }
-    suspend fun save(payment: PaymentRecord): Result<PaymentRecord> {
-        return paymentRepository.savePayment(payment)
-    }
-}
-
-------------------------------
-FILE: ProcessSaleUseCase.kt
-------------------------------
-package com.myimdad_por.domain.usecase
-import com.myimdad_por.domain.model.InvoiceLine
-import com.myimdad_por.domain.model.InvoiceType
-import com.myimdad_por.domain.model.PaymentStatus
-import com.myimdad_por.domain.model.Sale
-import com.myimdad_por.domain.model.SaleItem
-import com.myimdad_por.domain.model.SaleStatus
-import com.myimdad_por.domain.repository.SalesRepository
-import com.myimdad_por.domain.repository.StockRepository
-import java.math.BigDecimal
-import javax.inject.Inject
-data class ProcessSaleRequest(
-    val sale: Sale,
-    val defaultStockLocation: String? = null,
-    val itemBarcodes: Map<String, String> = emptyMap(),
-    val itemLocations: Map<String, String> = emptyMap(),
-    val createInvoice: Boolean = true,
-    val issueInvoiceNow: Boolean = true,
-    val invoiceDueDate: java.time.LocalDateTime? = null,
-    val allowReturnItems: Boolean = false,
-    val invoicePartyId: String? = null,
-    val invoicePartyName: String? = null,
-    val invoicePartyTaxNumber: String? = null,
-    val invoiceNotes: String? = null,
-    val invoiceTermsAndConditions: String? = null
-) {
-    init {
-        require(defaultStockLocation != null || itemLocations.isNotEmpty()) {
-            "Either defaultStockLocation or itemLocations must be provided"
-        }
-    }
-}
-data class ProcessSaleResult(
-    val sale: Sale,
-    val validation: com.myimdad_por.domain.repository.SaleValidationResult,
-    val savedSale: Sale,
-    val invoiceNumber: String? = null,
-    val invoiceId: String? = null,
-    val stockOperationsCount: Int = 0
-)
-class ProcessSaleUseCase @Inject constructor(
-    private val salesRepository: SalesRepository,
-    private val stockRepository: StockRepository,
-    private val createInvoiceUseCase: CreateInvoiceUseCase
-) {
-    suspend operator fun invoke(request: ProcessSaleRequest): Result<ProcessSaleResult> {
-        return runCatching {
-            val validation = salesRepository.validateSale(request.sale).getOrThrow()
-            require(validation.valid) {
-                validation.message ?: "Sale validation failed"
-            }
-            if (!request.allowReturnItems && request.sale.hasReturns()) {
-                throw IllegalStateException("Sale contains return items and allowReturnItems is false")
-            }
-            val savedSale = salesRepository.saveSale(request.sale).getOrThrow()
-            var stockOps = 0
-            for (item in savedSale.items) {
-                val barcode = request.itemBarcodes[item.productId] ?: item.productId
-                val location = request.itemLocations[item.productId] ?: request.defaultStockLocation
-                    ?: throw IllegalStateException("Missing stock location for productId=${item.productId}")
-                if (item.isReturn) {
-                    stockRepository.receiveStock(
-                        barcode = barcode,
-                        quantity = item.quantity.toDouble(),
-                        location = location,
-                        sourceDocumentId = savedSale.id,
-                        reason = "Return on sale ${savedSale.invoiceNumber}"
-                    ).getOrThrow()
-                } else {
-                    stockRepository.consumeStock(
-                        barcode = barcode,
-                        quantity = item.quantity.toDouble(),
-                        location = location,
-                        reason = "Sale ${savedSale.invoiceNumber}"
-                    ).getOrThrow()
-                }
-                stockOps++
-            }
-            if (savedSale.saleStatus != SaleStatus.COMPLETED) {
-                salesRepository.markSaleCompleted(savedSale.id).getOrThrow()
-            }
-            val invoice = if (request.createInvoice) {
-                val lines = savedSale.items.mapIndexed { index, item ->
-                    item.toInvoiceLine(
-                        barcode = request.itemBarcodes[item.productId] ?: item.productId,
-                        location = request.itemLocations[item.productId] ?: request.defaultStockLocation,
-                        lineIndex = index
+            add(
+                DashboardMetric(
+                    key = "month_revenue",
+                    label = "إيراد الشهر",
+                    value = dashboard.sales.monthRevenue.money(),
+                    formattedValue = dashboard.sales.monthRevenue.money().toPlainString(),
+                    deltaPercent = dashboard.sales.growthRatePercent,
+                    deltaLabel = dashboard.sales.growthRatePercent?.let { "مقارنة بالشهر السابق" },
+                    isPositiveTrend = (dashboard.sales.growthRatePercent ?: BigDecimal.ZERO) >= BigDecimal.ZERO,
+                    accentKey = "month_revenue"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "pending_invoices",
+                    label = "فواتير معلقة",
+                    value = dashboard.sales.pendingInvoicesCount.toBigDecimal(),
+                    formattedValue = dashboard.sales.pendingInvoicesCount.toString(),
+                    isPositiveTrend = false,
+                    accentKey = "pending"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "low_stock_count",
+                    label = "منخفض المخزون",
+                    value = dashboard.inventory.lowStockCount.toBigDecimal(),
+                    formattedValue = dashboard.inventory.lowStockCount.toString(),
+                    isPositiveTrend = false,
+                    accentKey = "low_stock"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "out_of_stock_count",
+                    label = "نفد المخزون",
+                    value = dashboard.inventory.outOfStockCount.toBigDecimal(),
+                    formattedValue = dashboard.inventory.outOfStockCount.toString(),
+                    isPositiveTrend = false,
+                    accentKey = "out_of_stock"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "customers_count",
+                    label = "العملاء",
+                    value = dashboard.customers.customersCount.toBigDecimal(),
+                    formattedValue = dashboard.customers.customersCount.toString(),
+                    isPositiveTrend = true,
+                    accentKey = "customers"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "net_balance",
+                    label = "صافي الرصيد",
+                    value = dashboard.financial.netBalance.money(),
+                    formattedValue = dashboard.financial.netBalance.money().toPlainString(),
+                    isPositiveTrend = dashboard.financial.netBalance >= BigDecimal.ZERO,
+                    accentKey = "finance"
+                )
+            )
+            dashboard.financial.profitEstimate?.let { profit ->
+                add(
+                    DashboardMetric(
+                        key = "profit_estimate",
+                        label = "الربح التقديري",
+                        value = profit.money(),
+                        formattedValue = profit.money().toPlainString(),
+                        isPositiveTrend = profit >= BigDecimal.ZERO,
+                        accentKey = "profit"
                     )
-                }
-                createInvoiceUseCase.createFromSale(
-                    saleId = savedSale.id,
-                    invoiceType = InvoiceType.SALE,
-                    lines = lines,
-                    partyId = request.invoicePartyId ?: savedSale.customerId,
-                    partyName = request.invoicePartyName,
-                    partyTaxNumber = request.invoicePartyTaxNumber,
-                    issuedByEmployeeId = savedSale.employeeId,
-                    dueDate = request.invoiceDueDate,
-                    notes = request.invoiceNotes ?: savedSale.note,
-                    termsAndConditions = request.invoiceTermsAndConditions
-                ).getOrThrow().invoice
-            } else {
-                null
+                )
             }
-            ProcessSaleResult(
-                sale = request.sale,
-                validation = validation,
-                savedSale = savedSale,
-                invoiceNumber = invoice?.invoiceNumber,
-                invoiceId = invoice?.id,
-                stockOperationsCount = stockOps
-            )
         }
     }
-    private fun SaleItem.toInvoiceLine(
-        barcode: String,
-        location: String?,
-        lineIndex: Int
-    ): InvoiceLine {
-        return InvoiceLine(
-            id = "${id}_$lineIndex",
-            barcode = barcode,
-            productName = productName,
-            displayName = null,
-            unitOfMeasure = unit,
-            quantity = quantity,
-            unitPrice = unitPrice,
-            location = location,
-            expiryDate = null,
-            taxAmount = taxAmount,
-            discountAmount = discountAmount,
-            note = note
+    private fun buildTrendSeries(
+        current: BigDecimal,
+        monthly: BigDecimal,
+        positiveLabel: String,
+        negativeLabel: String
+    ): AnalyticsTrend {
+        val safeCurrent = current.money()
+        val safeMonthly = monthly.money()
+        val changePercent = if (safeMonthly > BigDecimal.ZERO) {
+            ((safeCurrent - safeMonthly) / safeMonthly * BigDecimal(100)).setScale(2, RoundingMode.HALF_UP)
+        } else {
+            BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+        }
+        return AnalyticsTrend(
+            current = safeCurrent,
+            reference = safeMonthly,
+            changePercent = changePercent,
+            label = when {
+                changePercent > BigDecimal.ZERO -> positiveLabel
+                changePercent < BigDecimal.ZERO -> negativeLabel
+                else -> "ثابت"
+            },
+            isPositive = changePercent >= BigDecimal.ZERO
         )
     }
 }
-
-------------------------------
-FILE: SalesUiEvent.kt
-------------------------------
-package com.myimdad_por.ui.features.sales
-import com.myimdad_por.domain.model.Customer
-import com.myimdad_por.domain.model.PaymentMethod
-import com.myimdad_por.domain.model.Product
-import com.myimdad_por.domain.model.SaleItem
-sealed interface SalesUiEvent {
-    data object Load : SalesUiEvent
-    data object Refresh : SalesUiEvent
-    data object Retry : SalesUiEvent
-    data object ClearError : SalesUiEvent
-    data class ChangeSearchQuery(val query: String) : SalesUiEvent
-    data class SelectCustomer(val customer: Customer?) : SalesUiEvent
-    data class SelectPaymentMethod(val paymentMethod: PaymentMethod?) : SalesUiEvent
-    data class SelectSale(val saleId: String) : SalesUiEvent
-    data class AddProductToDraft(val product: Product, val quantity: Int = 1) : SalesUiEvent
-    data class AddDraftItem(val item: SaleItem) : SalesUiEvent
-    data class UpdateDraftItem(val item: SaleItem) : SalesUiEvent
-    data class RemoveDraftItem(val itemId: String) : SalesUiEvent
-    data object ClearDraftItems : SalesUiEvent
-    data class UpdateInvoiceNumber(val invoiceNumber: String) : SalesUiEvent
-    data class UpdateNote(val note: String) : SalesUiEvent
-    data class UpdatePaidAmount(val amount: String) : SalesUiEvent
-    data object SubmitSale : SalesUiEvent
-    data object SaveDraft : SalesUiEvent
-    data object DeleteSelectedSale : SalesUiEvent
-    data object ResetForm : SalesUiEvent
-    data object NavigateBack : SalesUiEvent
-}
-
-------------------------------
-FILE: SalesUiState.kt
-------------------------------
-package com.myimdad_por.ui.features.sales
-import com.myimdad_por.domain.model.Customer
-import com.myimdad_por.domain.model.PaymentMethod
-import com.myimdad_por.domain.model.Product
-import com.myimdad_por.domain.model.Sale
-import com.myimdad_por.domain.model.SaleItem
-import java.math.BigDecimal
-data class SalesUiState(
-    val isLoading: Boolean = false,
-    val isRefreshing: Boolean = false,
-    val isSubmitting: Boolean = false,
-    val errorMessage: String? = null,
-    val currencyCode: String = "SDG",
-    val sales: List<Sale> = emptyList(),
-    val availableProducts: List<Product> = emptyList(),
-    val customers: List<Customer> = emptyList(),
-    val selectedCustomer: Customer? = null,
-    val selectedPaymentMethod: PaymentMethod? = null,
-    val selectedSale: Sale? = null,
-    val invoiceNumber: String = "",
-    val searchQuery: String = "",
-    val note: String = "",
-    val draftItems: List<SaleItem> = emptyList(),
-    val paidAmount: BigDecimal = BigDecimal.ZERO,
-    val validationErrors: Map<String, String> = emptyMap(),
-    val canAccessCreditSales: Boolean = false,
-    val canAccessReturns: Boolean = false,
-    val isReadOnlyMode: Boolean = false
+data class AnalyticsData(
+    val summary: AnalyticsSummary = AnalyticsSummary(),
+    val metrics: List<DashboardMetric> = emptyList(),
+    val kpis: List<DashboardMetric> = emptyList(),
+    val alerts: List<DashboardAlert> = emptyList(),
+    val riskAlerts: List<DashboardAlert> = emptyList(),
+    val salesTrend: AnalyticsTrend = AnalyticsTrend(),
+    val inventoryTrend: AnalyticsTrend = AnalyticsTrend(),
+    val customerTrend: AnalyticsTrend = AnalyticsTrend()
 ) {
-    val subtotalAmount: BigDecimal
-        get() = draftItems.fold(BigDecimal.ZERO) { acc, item ->
-            acc.add(item.calculateSubtotal())
-        }.money()
-    val taxAmount: BigDecimal
-        get() = draftItems.fold(BigDecimal.ZERO) { acc, item ->
-            acc.add(item.netTaxAmount)
-        }.money()
-    val discountAmount: BigDecimal
-        get() = draftItems.fold(BigDecimal.ZERO) { acc, item ->
-            acc.add(item.netDiscountAmount)
-        }.money()
-    val totalAmount: BigDecimal
-        get() = subtotalAmount
-            .add(taxAmount)
-            .subtract(discountAmount)
-            .money()
-    val remainingAmount: BigDecimal
-        get() = (totalAmount - paidAmount).takeIf { it > BigDecimal.ZERO }?.money()
-            ?: BigDecimal.ZERO.setScale(2)
-    val changeAmount: BigDecimal
-        get() = (paidAmount - totalAmount).takeIf { it > BigDecimal.ZERO }?.money()
-            ?: BigDecimal.ZERO.setScale(2)
-    val itemCount: Int
-        get() = draftItems.size
-    val totalQuantity: BigDecimal
-        get() = draftItems.fold(BigDecimal.ZERO) { acc, item ->
-            acc.add(item.quantity)
-        }.money()
-    val hasDraftItems: Boolean
-        get() = draftItems.isNotEmpty()
-    val hasContent: Boolean
-        get() = sales.isNotEmpty() ||
-            availableProducts.isNotEmpty() ||
-            customers.isNotEmpty() ||
-            draftItems.isNotEmpty()
-    val hasError: Boolean
-        get() = !errorMessage.isNullOrBlank()
-    val canSubmit: Boolean
-        get() = draftItems.isNotEmpty() &&
-            selectedPaymentMethod != null &&
-            !isLoading &&
-            !isSubmitting &&
-            validationErrors.isEmpty()
-    val canUseCredit: Boolean
-        get() = canAccessCreditSales && selectedCustomer != null
-    val customerName: String
-        get() = selectedCustomer?.displayName.orEmpty()
-    val paymentMethodName: String
-        get() = selectedPaymentMethod?.displayName.orEmpty()
+    val hasData: Boolean
+        get() = metrics.isNotEmpty() || alerts.isNotEmpty()
 }
-enum class SalesMode {
-    Browse,
-    Create,
-    Edit,
-    Return
+data class AnalyticsSummary(
+    val title: String = "لوحة التحليلات",
+    val subtitle: String? = null,
+    val totalMetrics: Int = 0,
+    val positiveMetrics: Int = 0,
+    val negativeMetrics: Int = 0,
+    val totalAlerts: Int = 0,
+    val criticalAlerts: Int = 0,
+    val hasSalesGrowth: Boolean = false,
+    val hasStockRisk: Boolean = false,
+    val hasProfitData: Boolean = false,
+    val currencyCode: String = "SDG"
+)
+data class AnalyticsTrend(
+    val current: BigDecimal = BigDecimal.ZERO,
+    val reference: BigDecimal = BigDecimal.ZERO,
+    val changePercent: BigDecimal = BigDecimal.ZERO,
+    val label: String = "ثابت",
+    val isPositive: Boolean = true
+)
+private fun Int.toBigDecimal(): BigDecimal = BigDecimal.valueOf(toLong())
+private fun BigDecimal.money(): BigDecimal = setScale(2, RoundingMode.HALF_UP)
+
+------------------------------
+FILE: CheckDashboardAccess.kt
+------------------------------
+package com.myimdad_por.domain.usecase.dashboard
+import com.myimdad_por.domain.model.Dashboard
+import com.myimdad_por.domain.model.DashboardQuickAction
+class CheckDashboardAccess {
+    operator fun invoke(
+        dashboard: Dashboard?,
+        permissions: DashboardPermissions = DashboardPermissions()
+    ): DashboardAccessResult {
+        if (dashboard == null) {
+            return DashboardAccessResult(
+                canAccessDashboard = false,
+                allowedQuickActions = emptyList(),
+                deniedQuickActions = emptyList(),
+                reason = "لا توجد بيانات لوحة تحكم متاحة"
+            )
+        }
+        val allowedActions = dashboard.quickActions.filter { action ->
+            action.isEnabled && isActionAllowed(action, permissions)
+        }
+        val deniedActions = dashboard.quickActions.filterNot { action ->
+            action.isEnabled && isActionAllowed(action, permissions)
+        }
+        val canAccessDashboard = permissions.canViewDashboard
+        return DashboardAccessResult(
+            canAccessDashboard = canAccessDashboard,
+            allowedQuickActions = allowedActions,
+            deniedQuickActions = deniedActions,
+            reason = when {
+                !canAccessDashboard -> "ليس لديك صلاحية عرض لوحة التحكم"
+                dashboard.quickActions.isEmpty() -> "لوحة التحكم متاحة لكن لا توجد إجراءات سريعة"
+                else -> null
+            }
+        )
+    }
+    private fun isActionAllowed(
+        action: DashboardQuickAction,
+        permissions: DashboardPermissions
+    ): Boolean {
+        val requiredPermission = action.requiresPermission?.trim().orEmpty()
+        return when {
+            requiredPermission.isBlank() -> true
+            requiredPermission.equals(PermissionNames.VIEW_SALES, ignoreCase = true) -> permissions.canViewSales
+            requiredPermission.equals(PermissionNames.CREATE_SALES, ignoreCase = true) -> permissions.canCreateSales
+            requiredPermission.equals(PermissionNames.VIEW_CUSTOMERS, ignoreCase = true) -> permissions.canViewCustomers
+            requiredPermission.equals(PermissionNames.VIEW_INVENTORY, ignoreCase = true) -> permissions.canViewInventory
+            requiredPermission.equals(PermissionNames.VIEW_REPORTS, ignoreCase = true) -> permissions.canViewReports
+            requiredPermission.equals(PermissionNames.VIEW_FINANCE, ignoreCase = true) -> permissions.canViewFinance
+            else -> permissions.customPermissions.contains(requiredPermission)
+        }
+    }
 }
-private fun BigDecimal.money(): BigDecimal = setScale(2, java.math.RoundingMode.HALF_UP)
+data class DashboardPermissions(
+    val canViewDashboard: Boolean = true,
+    val canViewSales: Boolean = true,
+    val canCreateSales: Boolean = true,
+    val canViewCustomers: Boolean = true,
+    val canViewInventory: Boolean = true,
+    val canViewReports: Boolean = true,
+    val canViewFinance: Boolean = true,
+    val customPermissions: Set<String> = emptySet()
+)
+data class DashboardAccessResult(
+    val canAccessDashboard: Boolean,
+    val allowedQuickActions: List<DashboardQuickAction>,
+    val deniedQuickActions: List<DashboardQuickAction>,
+    val reason: String? = null
+) {
+    val hasAllowedActions: Boolean
+        get() = allowedQuickActions.isNotEmpty()
+    val hasDeniedActions: Boolean
+        get() = deniedQuickActions.isNotEmpty()
+}
+private object PermissionNames {
+    const val VIEW_SALES = "VIEW_SALES"
+    const val CREATE_SALES = "CREATE_SALES"
+    const val VIEW_CUSTOMERS = "VIEW_CUSTOMERS"
+    const val VIEW_INVENTORY = "VIEW_INVENTORY"
+    const val VIEW_REPORTS = "VIEW_REPORTS"
+    const val VIEW_FINANCE = "VIEW_FINANCE"
+}
+
+------------------------------
+FILE: CalculateKpis.kt
+------------------------------
+package com.myimdad_por.domain.usecase.dashboard
+import com.myimdad_por.domain.model.Dashboard
+import com.myimdad_por.domain.model.DashboardMetric
+import com.myimdad_por.domain.model.money
+import java.math.BigDecimal
+import java.math.RoundingMode
+class CalculateKpis {
+    operator fun invoke(dashboard: Dashboard?): List<DashboardMetric> {
+        if (dashboard == null) return emptyList()
+        val sales = dashboard.sales
+        val inventory = dashboard.inventory
+        val customers = dashboard.customers
+        val financial = dashboard.financial
+        val metrics = buildList {
+            add(
+                DashboardMetric(
+                    key = "today_sales_count",
+                    label = "مبيعات اليوم",
+                    value = dashboard.sales.todaySalesCount.toBigDecimal(),
+                    formattedValue = dashboard.sales.todaySalesCount.toString(),
+                    deltaPercent = dashboard.sales.growthRatePercent,
+                    deltaLabel = dashboard.sales.growthRatePercent?.let { "نمو المبيعات" },
+                    isPositiveTrend = (dashboard.sales.growthRatePercent ?: BigDecimal.ZERO) >= BigDecimal.ZERO,
+                    accentKey = "sales"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "today_revenue",
+                    label = "إيراد اليوم",
+                    value = sales.todayRevenue.money(),
+                    formattedValue = sales.todayRevenue.money().toPlainString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = true,
+                    accentKey = "revenue"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "month_revenue",
+                    label = "إيراد الشهر",
+                    value = sales.monthRevenue.money(),
+                    formattedValue = sales.monthRevenue.money().toPlainString(),
+                    deltaPercent = sales.growthRatePercent,
+                    deltaLabel = sales.growthRatePercent?.let { "مقارنة بالشهر السابق" },
+                    isPositiveTrend = (sales.growthRatePercent ?: BigDecimal.ZERO) >= BigDecimal.ZERO,
+                    accentKey = "month_revenue"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "pending_invoices",
+                    label = "فواتير معلقة",
+                    value = sales.pendingInvoicesCount.toBigDecimal(),
+                    formattedValue = sales.pendingInvoicesCount.toString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = false,
+                    accentKey = "pending"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "returns_count",
+                    label = "المرتجعات",
+                    value = sales.returnsCount.toBigDecimal(),
+                    formattedValue = sales.returnsCount.toString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = false,
+                    accentKey = "returns"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "products_count",
+                    label = "عدد المنتجات",
+                    value = inventory.productsCount.toBigDecimal(),
+                    formattedValue = inventory.productsCount.toString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = true,
+                    accentKey = "inventory"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "low_stock_count",
+                    label = "منخفض المخزون",
+                    value = inventory.lowStockCount.toBigDecimal(),
+                    formattedValue = inventory.lowStockCount.toString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = false,
+                    accentKey = "low_stock"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "out_of_stock_count",
+                    label = "نفد المخزون",
+                    value = inventory.outOfStockCount.toBigDecimal(),
+                    formattedValue = inventory.outOfStockCount.toString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = false,
+                    accentKey = "out_of_stock"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "customers_count",
+                    label = "العملاء",
+                    value = customers.customersCount.toBigDecimal(),
+                    formattedValue = customers.customersCount.toString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = true,
+                    accentKey = "customers"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "new_customers_count",
+                    label = "عملاء جدد",
+                    value = customers.newCustomersCount.toBigDecimal(),
+                    formattedValue = customers.newCustomersCount.toString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = true,
+                    accentKey = "new_customers"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "net_balance",
+                    label = "صافي الرصيد",
+                    value = financial.netBalance.money(),
+                    formattedValue = financial.netBalance.money().toPlainString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = financial.netBalance >= BigDecimal.ZERO,
+                    accentKey = "finance"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "receivables",
+                    label = "الذمم المدينة",
+                    value = financial.receivables.money(),
+                    formattedValue = financial.receivables.money().toPlainString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = false,
+                    accentKey = "receivables"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "payables",
+                    label = "الذمم الدائنة",
+                    value = financial.payables.money(),
+                    formattedValue = financial.payables.money().toPlainString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = false,
+                    accentKey = "payables"
+                )
+            )
+            financial.profitEstimate?.let { profit ->
+                add(
+                    DashboardMetric(
+                        key = "profit_estimate",
+                        label = "الربح التقديري",
+                        value = profit.money(),
+                        formattedValue = profit.money().toPlainString(),
+                        deltaPercent = null,
+                        deltaLabel = null,
+                        isPositiveTrend = profit >= BigDecimal.ZERO,
+                        accentKey = "profit"
+                    )
+                )
+            }
+        }
+        return metrics.sortedWith(
+            compareBy<DashboardMetric> { metricPriority(it.key) }
+                .thenBy { it.label }
+        )
+    }
+    private fun metricPriority(key: String): Int {
+        return when (key) {
+            "today_sales_count" -> 0
+            "today_revenue" -> 1
+            "month_revenue" -> 2
+            "pending_invoices" -> 3
+            "returns_count" -> 4
+            "products_count" -> 5
+            "low_stock_count" -> 6
+            "out_of_stock_count" -> 7
+            "customers_count" -> 8
+            "new_customers_count" -> 9
+            "net_balance" -> 10
+            "receivables" -> 11
+            "payables" -> 12
+            "profit_estimate" -> 13
+            else -> 99
+        }
+    }
+}
+private fun Int.toBigDecimal(): BigDecimal = BigDecimal.valueOf(toLong())
 

@@ -7,10 +7,7 @@ import com.google.gson.GsonBuilder
 import com.myimdad_por.core.network.CertificatePinningConfig
 import com.myimdad_por.core.network.SecureApiClient
 import com.myimdad_por.core.utils.Constants
-import com.myimdad_por.data.remote.api.ApiService
-import com.myimdad_por.data.remote.api.AuthApiService
-import com.myimdad_por.data.remote.api.ReportApiService // تأكد من استيراده
-import com.myimdad_por.data.remote.api.SubscriptionApiService
+import com.myimdad_por.data.remote.api.* // قمنا باستيراد الكل لضمان وجود جميع الواجهات
 import com.myimdad_por.data.remote.interceptor.AuthInterceptor
 import dagger.Module
 import dagger.Provides
@@ -34,7 +31,7 @@ object NetworkModule {
     @Singleton
     fun provideGson(): Gson = GsonBuilder()
         .serializeNulls()
-        .setLenient() // إضافة لتحمل بعض أخطاء التنسيق من السيرفر
+        .setLenient()
         .create()
 
     @Provides
@@ -92,7 +89,7 @@ object NetworkModule {
             .build()
     }
 
-    // --- حقن واجهات الـ API ---
+    // --- حقن واجهات الـ API (الارتباطات الثابتة) ---
 
     @Provides
     @Singleton
@@ -109,11 +106,34 @@ object NetworkModule {
     fun provideSubscriptionApiService(retrofit: Retrofit): SubscriptionApiService = 
         retrofit.create(SubscriptionApiService::class.java)
 
-    /**
-     * توفير ReportApiService لإصلاح خطأ [Dagger/MissingBinding]
-     */
     @Provides
     @Singleton
     fun provideReportApiService(retrofit: Retrofit): ReportApiService = 
         retrofit.create(ReportApiService::class.java)
+
+    // --- إصلاح أخطاء [Dagger/MissingBinding] المتبقية ---
+
+    /**
+     * يوفر واجهة العميل للتعامل مع بيانات العملاء
+     */
+    @Provides
+    @Singleton
+    fun provideCustomerApiService(retrofit: Retrofit): CustomerApiService = 
+        retrofit.create(CustomerApiService::class.java)
+
+    /**
+     * يوفر واجهة الفواتير للتعامل مع المبيعات والعمليات المالية
+     */
+    @Provides
+    @Singleton
+    fun provideInvoiceApiService(retrofit: Retrofit): InvoiceApiService = 
+        retrofit.create(InvoiceApiService::class.java)
+
+    /**
+     * يوفر واجهة المخزون لإدارة كميات المنتجات والتحركات المخزنية
+     */
+    @Provides
+    @Singleton
+    fun provideStockApiService(retrofit: Retrofit): StockApiService = 
+        retrofit.create(StockApiService::class.java)
 }

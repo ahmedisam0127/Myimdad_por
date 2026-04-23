@@ -26,7 +26,7 @@ def get_clean_content(file_path):
 
 def main():
     # القائمة المطلوبة من الملفات
-    files_to_find = " BaseViewModel.kt, SalesUiState.kt, SalesUiEvent.kt, ProcessSaleUseCase.kt, ProcessPaymentUseCase.kt, GetCustomersUseCase.kt, GetInventoryUseCase.kt, Product.kt, Customer.kt, Sale.kt, SaleItem.kt, PaymentMethod.kt"
+    files_to_find = "  CheckDashboardAccess.kt,CalculateKpis.kt,GetAnalyticsData.kt, DashboardRepository.kt,Dashboard.kt "
     target_filenames = {name.strip() for name in files_to_find.replace('"', '').split(',')}
     
     output_filename = "Ahme_ed"

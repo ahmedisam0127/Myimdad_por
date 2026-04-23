@@ -19,7 +19,7 @@ import retrofit2.Response
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
-
+import javax.inject.Inject
 /**
  * Retrofit-backed authentication datasource.
  *
@@ -28,7 +28,7 @@ import java.net.UnknownHostException
  * - consistent exception translation
  * - compact auth-specific helpers
  */
-class AuthRemoteDataSourceImpl(
+class AuthRemoteDataSourceImpl @Inject constructor(
     private val apiService: ApiService
 ) {
 

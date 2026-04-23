@@ -22,7 +22,7 @@ import java.io.IOException
 import java.math.BigDecimal
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
-
+import javax.inject.Inject
 /**
  * Remote datasource خاصة بالموردين.
  *
@@ -31,7 +31,7 @@ import java.net.UnknownHostException
  * - تحويل الأخطاء إلى ApiException موحّد
  * - إعادة النتائج كـ NetworkResult
  */
-class SupplierRemoteDataSource(
+class SupplierRemoteDataSource @Inject constructor(
     private val apiService: SupplierApiService
 ) {
 
