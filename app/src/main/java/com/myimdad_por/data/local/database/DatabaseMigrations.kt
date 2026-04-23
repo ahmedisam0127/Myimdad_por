@@ -5,12 +5,13 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 object DatabaseMigrations {
 
-    const val DATABASE_VERSION: Int = 4
+    const val DATABASE_VERSION: Int = 5
 
     fun all(): Array<Migration> = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
-        MIGRATION_3_4
+        MIGRATION_3_4,
+        MIGRATION_4_5
     )
 
     val MIGRATION_1_2: Migration = object : Migration(1, 2) {
@@ -36,6 +37,59 @@ object DatabaseMigrations {
         override fun migrate(database: SupportSQLiteDatabase) {
             createReportsTable(database)
         }
+    }
+
+    val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            createDashboardCacheTable(database)
+        }
+    }
+
+    private fun createDashboardCacheTable(database: SupportSQLiteDatabase) {
+        database.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `dashboard_cache` (
+                `id` INTEGER NOT NULL,
+                `overviewTitle` TEXT NOT NULL DEFAULT 'لوحة التحكم',
+                `overviewSubtitle` TEXT,
+                `overviewGreeting` TEXT,
+                `overviewTotalMetrics` INTEGER NOT NULL DEFAULT 0,
+                `overviewPositiveMetrics` INTEGER NOT NULL DEFAULT 0,
+                `overviewNegativeMetrics` INTEGER NOT NULL DEFAULT 0,
+                `salesTodaySalesCount` INTEGER NOT NULL DEFAULT 0,
+                `salesTodayRevenue` TEXT NOT NULL DEFAULT '0.00',
+                `salesMonthSalesCount` INTEGER NOT NULL DEFAULT 0,
+                `salesMonthRevenue` TEXT NOT NULL DEFAULT '0.00',
+                `salesPendingInvoicesCount` INTEGER NOT NULL DEFAULT 0,
+                `salesReturnsCount` INTEGER NOT NULL DEFAULT 0,
+                `salesTopSellingProductName` TEXT,
+                `salesGrowthRatePercent` TEXT,
+                `inventoryProductsCount` INTEGER NOT NULL DEFAULT 0,
+                `inventoryLowStockCount` INTEGER NOT NULL DEFAULT 0,
+                `inventoryOutOfStockCount` INTEGER NOT NULL DEFAULT 0,
+                `inventoryTotalStockValue` TEXT NOT NULL DEFAULT '0.00',
+                `inventoryReservedItemsCount` INTEGER NOT NULL DEFAULT 0,
+                `inventoryMostCriticalProductName` TEXT,
+                `customersCount` INTEGER NOT NULL DEFAULT 0,
+                `customersNewCustomersCount` INTEGER NOT NULL DEFAULT 0,
+                `customersActiveCustomersCount` INTEGER NOT NULL DEFAULT 0,
+                `customersDueCustomersCount` INTEGER NOT NULL DEFAULT 0,
+                `customersTopCustomerName` TEXT,
+                `customersAverageOrderValue` TEXT NOT NULL DEFAULT '0.00',
+                `financialTotalCashIn` TEXT NOT NULL DEFAULT '0.00',
+                `financialTotalCashOut` TEXT NOT NULL DEFAULT '0.00',
+                `financialNetBalance` TEXT NOT NULL DEFAULT '0.00',
+                `financialReceivables` TEXT NOT NULL DEFAULT '0.00',
+                `financialPayables` TEXT NOT NULL DEFAULT '0.00',
+                `financialProfitEstimate` TEXT,
+                `financialCurrencyCode` TEXT NOT NULL DEFAULT 'SDG',
+                `alertsJson` TEXT NOT NULL DEFAULT '[]',
+                `quickActionsJson` TEXT NOT NULL DEFAULT '[]',
+                `lastUpdatedAtEpochMillis` INTEGER,
+                PRIMARY KEY(`id`)
+            )
+            """.trimIndent()
+        )
     }
 
     private fun createInvoicesTable(database: SupportSQLiteDatabase) {

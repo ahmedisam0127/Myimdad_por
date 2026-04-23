@@ -1,4 +1,5 @@
 package com.myimdad_por.di
+import com.myimdad_por.data.remote.api.DashboardApiService
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
@@ -7,7 +8,7 @@ import com.google.gson.GsonBuilder
 import com.myimdad_por.core.network.CertificatePinningConfig
 import com.myimdad_por.core.network.SecureApiClient
 import com.myimdad_por.core.utils.Constants
-import com.myimdad_por.data.remote.api.* // قمنا باستيراد الكل لضمان وجود جميع الواجهات
+import com.myimdad_por.data.remote.api.*
 import com.myimdad_por.data.remote.interceptor.AuthInterceptor
 import dagger.Module
 import dagger.Provides
@@ -89,12 +90,21 @@ object NetworkModule {
             .build()
     }
 
-    // --- حقن واجهات الـ API (الارتباطات الثابتة) ---
+    // --- حقن واجهات الـ API ---
 
     @Provides
     @Singleton
     fun provideAuthApiService(retrofit: Retrofit): AuthApiService = 
         retrofit.create(AuthApiService::class.java)
+
+    /**
+     * يوفر واجهة لوحة التحكم للتعامل مع البيانات والملخصات
+     * (تمت إضافتها هنا لإصلاح خطأ MissingBinding)
+     */
+    @Provides
+    @Singleton
+    fun provideDashboardApiService(retrofit: Retrofit): DashboardApiService = 
+        retrofit.create(DashboardApiService::class.java)
 
     @Provides
     @Singleton
@@ -111,27 +121,16 @@ object NetworkModule {
     fun provideReportApiService(retrofit: Retrofit): ReportApiService = 
         retrofit.create(ReportApiService::class.java)
 
-    // --- إصلاح أخطاء [Dagger/MissingBinding] المتبقية ---
-
-    /**
-     * يوفر واجهة العميل للتعامل مع بيانات العملاء
-     */
     @Provides
     @Singleton
     fun provideCustomerApiService(retrofit: Retrofit): CustomerApiService = 
         retrofit.create(CustomerApiService::class.java)
 
-    /**
-     * يوفر واجهة الفواتير للتعامل مع المبيعات والعمليات المالية
-     */
     @Provides
     @Singleton
     fun provideInvoiceApiService(retrofit: Retrofit): InvoiceApiService = 
         retrofit.create(InvoiceApiService::class.java)
 
-    /**
-     * يوفر واجهة المخزون لإدارة كميات المنتجات والتحركات المخزنية
-     */
     @Provides
     @Singleton
     fun provideStockApiService(retrofit: Retrofit): StockApiService = 

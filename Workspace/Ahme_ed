@@ -2,672 +2,1681 @@
 Search Path: /storage/emulated/0/AndroidIDEProjects/Myimdad_por/app/src/main/java/com/myimdad_por
 
 ------------------------------
-FILE: DashboardRepository.kt
+FILE: AppTopBar.kt
 ------------------------------
-
-
-------------------------------
-FILE: Dashboard.kt
-------------------------------
-package com.myimdad_por.domain.model
-import java.math.BigDecimal
-import java.math.RoundingMode
-data class Dashboard(
-    val overview: DashboardOverview = DashboardOverview(),
-    val sales: DashboardSalesSummary = DashboardSalesSummary(),
-    val inventory: DashboardInventorySummary = DashboardInventorySummary(),
-    val customers: DashboardCustomerSummary = DashboardCustomerSummary(),
-    val financial: DashboardFinancialSummary = DashboardFinancialSummary(),
-    val alerts: List<DashboardAlert> = emptyList(),
-    val quickActions: List<DashboardQuickAction> = emptyList(),
-    val lastUpdatedAtEpochMillis: Long? = null
+package com.myimdad_por.ui.components
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.Divider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.myimdad_por.ui.theme.AppDimens
+import com.myimdad_por.ui.theme.AppShapeTokens
+object AppTopBarDefaults {
+    val horizontalPadding: Dp = AppDimens.Layout.screenPadding
+    val verticalPadding: Dp = AppDimens.Spacing.small
+    val minHeight: Dp = AppDimens.Component.topBarHeight
+    val dividerThickness: Dp = 1.dp
+    val navigationButtonSize: Dp = 48.dp
+}
+@Composable
+fun AppTopBar(
+    title: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    onBackClick: (() -> Unit)? = null,
+    navigationIcon: (@Composable () -> Unit)? = null,
+    actions: @Composable RowScope.() -> Unit = {},
+    centeredTitle: Boolean = false,
+    showDivider: Boolean = true,
+    backgroundColor: Color = MaterialTheme.colorScheme.surface,
+    contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    subtitleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
-    val hasAlerts: Boolean
-        get() = alerts.isNotEmpty()
-    val hasQuickActions: Boolean
-        get() = quickActions.isNotEmpty()
-    val isFresh: Boolean
-        get() = lastUpdatedAtEpochMillis != null
-}
-data class DashboardOverview(
-    val title: String = "لوحة التحكم",
-    val subtitle: String? = null,
-    val greeting: String? = null,
-    val totalMetrics: Int = 0,
-    val positiveMetrics: Int = 0,
-    val negativeMetrics: Int = 0
-) {
-    val hasPerformanceData: Boolean
-        get() = totalMetrics > 0
-}
-data class DashboardSalesSummary(
-    val todaySalesCount: Int = 0,
-    val todayRevenue: BigDecimal = BigDecimal.ZERO,
-    val monthSalesCount: Int = 0,
-    val monthRevenue: BigDecimal = BigDecimal.ZERO,
-    val pendingInvoicesCount: Int = 0,
-    val returnsCount: Int = 0,
-    val topSellingProductName: String? = null,
-    val growthRatePercent: BigDecimal? = null
-) {
-    val hasGrowthRate: Boolean
-        get() = growthRatePercent != null
-}
-data class DashboardInventorySummary(
-    val productsCount: Int = 0,
-    val lowStockCount: Int = 0,
-    val outOfStockCount: Int = 0,
-    val totalStockValue: BigDecimal = BigDecimal.ZERO,
-    val reservedItemsCount: Int = 0,
-    val mostCriticalProductName: String? = null
-) {
-    val hasStockRisk: Boolean
-        get() = lowStockCount > 0 || outOfStockCount > 0
-}
-data class DashboardCustomerSummary(
-    val customersCount: Int = 0,
-    val newCustomersCount: Int = 0,
-    val activeCustomersCount: Int = 0,
-    val dueCustomersCount: Int = 0,
-    val topCustomerName: String? = null,
-    val averageOrderValue: BigDecimal = BigDecimal.ZERO
-)
-data class DashboardFinancialSummary(
-    val totalCashIn: BigDecimal = BigDecimal.ZERO,
-    val totalCashOut: BigDecimal = BigDecimal.ZERO,
-    val netBalance: BigDecimal = BigDecimal.ZERO,
-    val receivables: BigDecimal = BigDecimal.ZERO,
-    val payables: BigDecimal = BigDecimal.ZERO,
-    val profitEstimate: BigDecimal? = null,
-    val currencyCode: String = "SDG"
-) {
-    val hasProfitData: Boolean
-        get() = profitEstimate != null
-}
-data class DashboardMetric(
-    val key: String,
-    val label: String,
-    val value: BigDecimal,
-    val formattedValue: String? = null,
-    val deltaPercent: BigDecimal? = null,
-    val deltaLabel: String? = null,
-    val isPositiveTrend: Boolean = true,
-    val accentKey: String? = null
-) {
-    val hasDelta: Boolean
-        get() = deltaPercent != null
-    fun normalizedValue(scale: Int = 2): BigDecimal = value.setScale(scale, RoundingMode.HALF_UP)
-}
-enum class DashboardAlertLevel {
-    Info,
-    Warning,
-    Critical
-}
-data class DashboardAlert(
-    val id: String,
-    val title: String,
-    val message: String,
-    val level: DashboardAlertLevel = DashboardAlertLevel.Info,
-    val actionLabel: String? = null,
-    val targetRoute: String? = null,
-    val isDismissible: Boolean = true
-) {
-    val hasAction: Boolean
-        get() = !actionLabel.isNullOrBlank() && !targetRoute.isNullOrBlank()
-}
-data class DashboardQuickAction(
-    val id: String,
-    val title: String,
-    val description: String? = null,
-    val iconName: String? = null,
-    val route: String? = null,
-    val isEnabled: Boolean = true,
-    val requiresPermission: String? = null
-) {
-    val canNavigate: Boolean
-        get() = isEnabled && !route.isNullOrBlank()
-}
-fun BigDecimal.money(scale: Int = 2): BigDecimal = setScale(scale, RoundingMode.HALF_UP)
-
-------------------------------
-FILE: DashboardRepository.kt
-------------------------------
-package com.myimdad_por.domain.repository
-import com.myimdad_por.domain.model.Dashboard
-import kotlinx.coroutines.flow.Flow
-interface DashboardRepository {
-    suspend fun getDashboard(forceRefresh: Boolean = false): Result<Dashboard>
-    suspend fun refreshDashboard(): Result<Dashboard>
-    fun observeDashboard(): Flow<Dashboard>
-    suspend fun getCachedDashboard(): Dashboard?
-    suspend fun markAlertAsRead(alertId: String): Result<Unit>
-    suspend fun dismissAlert(alertId: String): Result<Unit>
-}
-
-------------------------------
-FILE: GetAnalyticsData.kt
-------------------------------
-package com.myimdad_por.domain.usecase.dashboard
-import com.myimdad_por.domain.model.Dashboard
-import com.myimdad_por.domain.model.DashboardAlert
-import com.myimdad_por.domain.model.DashboardAlertLevel
-import com.myimdad_por.domain.model.DashboardMetric
-import java.math.BigDecimal
-import java.math.RoundingMode
-class GetAnalyticsData {
-    operator fun invoke(dashboard: Dashboard?): AnalyticsData {
-        if (dashboard == null) {
-            return AnalyticsData()
-        }
-        val metrics = buildMetrics(dashboard)
-        val alerts = dashboard.alerts
-        val summary = buildSummary(dashboard, metrics, alerts)
-        return AnalyticsData(
-            summary = summary,
-            metrics = metrics,
-            alerts = alerts,
-            kpis = metrics.take(6),
-            riskAlerts = alerts.filter { it.level != DashboardAlertLevel.Info },
-            salesTrend = buildTrendSeries(
-                current = dashboard.sales.todayRevenue,
-                monthly = dashboard.sales.monthRevenue,
-                positiveLabel = "إيرادات",
-                negativeLabel = "انخفاض"
-            ),
-            inventoryTrend = buildTrendSeries(
-                current = dashboard.inventory.productsCount.toBigDecimal(),
-                monthly = dashboard.inventory.lowStockCount.toBigDecimal(),
-                positiveLabel = "متاح",
-                negativeLabel = "منخفض"
-            ),
-            customerTrend = buildTrendSeries(
-                current = dashboard.customers.customersCount.toBigDecimal(),
-                monthly = dashboard.customers.newCustomersCount.toBigDecimal(),
-                positiveLabel = "عملاء",
-                negativeLabel = "جدد"
-            )
-        )
-    }
-    private fun buildSummary(
-        dashboard: Dashboard,
-        metrics: List<DashboardMetric>,
-        alerts: List<DashboardAlert>
-    ): AnalyticsSummary {
-        val totalPositive = metrics.count { it.isPositiveTrend }
-        val totalNegative = metrics.count { !it.isPositiveTrend }
-        val highPriorityAlerts = alerts.count { it.level == DashboardAlertLevel.Warning || it.level == DashboardAlertLevel.Critical }
-        return AnalyticsSummary(
-            title = dashboard.overview.title,
-            subtitle = dashboard.overview.subtitle,
-            totalMetrics = metrics.size,
-            positiveMetrics = totalPositive,
-            negativeMetrics = totalNegative,
-            totalAlerts = alerts.size,
-            criticalAlerts = highPriorityAlerts,
-            hasSalesGrowth = dashboard.sales.growthRatePercent?.let { it > BigDecimal.ZERO } == true,
-            hasStockRisk = dashboard.inventory.hasStockRisk,
-            hasProfitData = dashboard.financial.hasProfitData,
-            currencyCode = dashboard.financial.currencyCode
-        )
-    }
-    private fun buildMetrics(dashboard: Dashboard): List<DashboardMetric> {
-        return buildList {
-            add(
-                DashboardMetric(
-                    key = "today_sales_count",
-                    label = "مبيعات اليوم",
-                    value = dashboard.sales.todaySalesCount.toBigDecimal(),
-                    formattedValue = dashboard.sales.todaySalesCount.toString(),
-                    deltaPercent = dashboard.sales.growthRatePercent,
-                    deltaLabel = dashboard.sales.growthRatePercent?.let { "نمو" },
-                    isPositiveTrend = (dashboard.sales.growthRatePercent ?: BigDecimal.ZERO) >= BigDecimal.ZERO,
-                    accentKey = "sales"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "today_revenue",
-                    label = "إيراد اليوم",
-                    value = dashboard.sales.todayRevenue.money(),
-                    formattedValue = dashboard.sales.todayRevenue.money().toPlainString(),
-                    isPositiveTrend = true,
-                    accentKey = "revenue"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "month_revenue",
-                    label = "إيراد الشهر",
-                    value = dashboard.sales.monthRevenue.money(),
-                    formattedValue = dashboard.sales.monthRevenue.money().toPlainString(),
-                    deltaPercent = dashboard.sales.growthRatePercent,
-                    deltaLabel = dashboard.sales.growthRatePercent?.let { "مقارنة بالشهر السابق" },
-                    isPositiveTrend = (dashboard.sales.growthRatePercent ?: BigDecimal.ZERO) >= BigDecimal.ZERO,
-                    accentKey = "month_revenue"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "pending_invoices",
-                    label = "فواتير معلقة",
-                    value = dashboard.sales.pendingInvoicesCount.toBigDecimal(),
-                    formattedValue = dashboard.sales.pendingInvoicesCount.toString(),
-                    isPositiveTrend = false,
-                    accentKey = "pending"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "low_stock_count",
-                    label = "منخفض المخزون",
-                    value = dashboard.inventory.lowStockCount.toBigDecimal(),
-                    formattedValue = dashboard.inventory.lowStockCount.toString(),
-                    isPositiveTrend = false,
-                    accentKey = "low_stock"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "out_of_stock_count",
-                    label = "نفد المخزون",
-                    value = dashboard.inventory.outOfStockCount.toBigDecimal(),
-                    formattedValue = dashboard.inventory.outOfStockCount.toString(),
-                    isPositiveTrend = false,
-                    accentKey = "out_of_stock"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "customers_count",
-                    label = "العملاء",
-                    value = dashboard.customers.customersCount.toBigDecimal(),
-                    formattedValue = dashboard.customers.customersCount.toString(),
-                    isPositiveTrend = true,
-                    accentKey = "customers"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "net_balance",
-                    label = "صافي الرصيد",
-                    value = dashboard.financial.netBalance.money(),
-                    formattedValue = dashboard.financial.netBalance.money().toPlainString(),
-                    isPositiveTrend = dashboard.financial.netBalance >= BigDecimal.ZERO,
-                    accentKey = "finance"
-                )
-            )
-            dashboard.financial.profitEstimate?.let { profit ->
-                add(
-                    DashboardMetric(
-                        key = "profit_estimate",
-                        label = "الربح التقديري",
-                        value = profit.money(),
-                        formattedValue = profit.money().toPlainString(),
-                        isPositiveTrend = profit >= BigDecimal.ZERO,
-                        accentKey = "profit"
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .statusBarsPadding(),
+        color = backgroundColor,
+        contentColor = contentColor,
+        tonalElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = AppTopBarDefaults.minHeight)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = AppTopBarDefaults.horizontalPadding,
+                        vertical = AppTopBarDefaults.verticalPadding
+                    ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val navIcon = when {
+                    navigationIcon != null -> navigationIcon
+                    onBackClick != null -> {
+                        {
+                            AppTopBarBackButton(onClick = onBackClick)
+                        }
+                    }
+                    else -> null
+                }
+                if (centeredTitle) {
+                    if (navIcon != null) {
+                        navIcon()
+                    } else {
+                        Spacer(modifier = Modifier.size(AppTopBarDefaults.navigationButtonSize))
+                    }
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        TitleBlock(
+                            title = title,
+                            subtitle = subtitle,
+                            subtitleColor = subtitleColor,
+                            centered = true
+                        )
+                    }
+                    Spacer(modifier = Modifier.size(AppTopBarDefaults.navigationButtonSize))
+                } else {
+                    if (navIcon != null) {
+                        navIcon()
+                    }
+                    Spacer(modifier = Modifier.size(AppDimens.Spacing.small))
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        TitleBlock(
+                            title = title,
+                            subtitle = subtitle,
+                            subtitleColor = subtitleColor,
+                            centered = false
+                        )
+                    }
+                    Spacer(modifier = Modifier.size(AppDimens.Spacing.small))
+                    Row(
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                        content = actions
                     )
+                }
+            }
+            if (showDivider) {
+                Divider(
+                    modifier = Modifier.fillMaxWidth(),
+                    thickness = AppTopBarDefaults.dividerThickness,
+                    color = MaterialTheme.colorScheme.outlineVariant
                 )
             }
         }
     }
-    private fun buildTrendSeries(
-        current: BigDecimal,
-        monthly: BigDecimal,
-        positiveLabel: String,
-        negativeLabel: String
-    ): AnalyticsTrend {
-        val safeCurrent = current.money()
-        val safeMonthly = monthly.money()
-        val changePercent = if (safeMonthly > BigDecimal.ZERO) {
-            ((safeCurrent - safeMonthly) / safeMonthly * BigDecimal(100)).setScale(2, RoundingMode.HALF_UP)
-        } else {
-            BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+}
+@Composable
+private fun TitleBlock(
+    title: String,
+    subtitle: String?,
+    subtitleColor: Color,
+    centered: Boolean
+) {
+    Column(
+        horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.semantics { heading() }
+        )
+        if (!subtitle.isNullOrBlank()) {
+            Spacer(modifier = Modifier.padding(top = AppDimens.Spacing.extraSmall))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = subtitleColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
-        return AnalyticsTrend(
-            current = safeCurrent,
-            reference = safeMonthly,
-            changePercent = changePercent,
-            label = when {
-                changePercent > BigDecimal.ZERO -> positiveLabel
-                changePercent < BigDecimal.ZERO -> negativeLabel
-                else -> "ثابت"
+    }
+}
+@Composable
+fun AppTopBarBackButton(
+    onClick: () -> Unit,
+    contentDescription: String = "رجوع"
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(AppTopBarDefaults.navigationButtonSize)
+            .semantics {
+                this.contentDescription = contentDescription
+            }
+    ) {
+        Icon(
+            imageVector = Icons.Filled.ArrowBack,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+@Composable
+fun AppTopBarSimple(
+    title: String,
+    onBackClick: (() -> Unit)? = null,
+    actions: @Composable RowScope.() -> Unit = {},
+    modifier: Modifier = Modifier,
+    centeredTitle: Boolean = false
+) {
+    AppTopBar(
+        title = title,
+        modifier = modifier,
+        onBackClick = onBackClick,
+        actions = actions,
+        centeredTitle = centeredTitle,
+        showDivider = true
+    )
+}
+
+------------------------------
+FILE: ErrorState.kt
+------------------------------
+package com.myimdad_por.ui.components
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.myimdad_por.ui.theme.AppDimens
+import com.myimdad_por.ui.theme.AppTypography
+import com.myimdad_por.ui.theme.ErrorColor
+import com.myimdad_por.ui.theme.ErrorContainer
+import com.myimdad_por.ui.theme.TextPrimaryColor
+import com.myimdad_por.ui.theme.TextSecondaryColor
+enum class ErrorStateStyle {
+    FullScreen,
+    Card,
+    Inline
+}
+@Composable
+fun ErrorState(
+    message: String,
+    modifier: Modifier = Modifier,
+    title: String = "حدث خطأ",
+    details: String? = null,
+    retryText: String = "إعادة المحاولة",
+    dismissText: String? = null,
+    onRetry: (() -> Unit)? = null,
+    onDismiss: (() -> Unit)? = null,
+    style: ErrorStateStyle = ErrorStateStyle.FullScreen,
+    contentDescription: String? = null
+) {
+    val safeMessage = remember(message) {
+        message.trim().ifBlank { "تعذر إكمال العملية" }
+    }
+    when (style) {
+        ErrorStateStyle.FullScreen -> FullScreenErrorState(
+            title = title,
+            message = safeMessage,
+            details = details,
+            retryText = retryText,
+            dismissText = dismissText,
+            onRetry = onRetry,
+            onDismiss = onDismiss,
+            modifier = modifier,
+            contentDescription = contentDescription
+        )
+        ErrorStateStyle.Card -> CardErrorState(
+            title = title,
+            message = safeMessage,
+            details = details,
+            retryText = retryText,
+            dismissText = dismissText,
+            onRetry = onRetry,
+            onDismiss = onDismiss,
+            modifier = modifier,
+            contentDescription = contentDescription
+        )
+        ErrorStateStyle.Inline -> InlineErrorState(
+            title = title,
+            message = safeMessage,
+            details = details,
+            retryText = retryText,
+            dismissText = dismissText,
+            onRetry = onRetry,
+            onDismiss = onDismiss,
+            modifier = modifier,
+            contentDescription = contentDescription
+        )
+    }
+}
+@Composable
+fun FullScreenErrorState(
+    title: String,
+    message: String,
+    modifier: Modifier = Modifier,
+    details: String? = null,
+    retryText: String = "إعادة المحاولة",
+    dismissText: String? = null,
+    onRetry: (() -> Unit)? = null,
+    onDismiss: (() -> Unit)? = null,
+    contentDescription: String? = null
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 280.dp)
+            .semantics {
+                role = Role.Image
+                if (!contentDescription.isNullOrBlank()) {
+                    this.contentDescription = contentDescription
+                }
             },
-            isPositive = changePercent >= BigDecimal.ZERO
-        )
-    }
-}
-data class AnalyticsData(
-    val summary: AnalyticsSummary = AnalyticsSummary(),
-    val metrics: List<DashboardMetric> = emptyList(),
-    val kpis: List<DashboardMetric> = emptyList(),
-    val alerts: List<DashboardAlert> = emptyList(),
-    val riskAlerts: List<DashboardAlert> = emptyList(),
-    val salesTrend: AnalyticsTrend = AnalyticsTrend(),
-    val inventoryTrend: AnalyticsTrend = AnalyticsTrend(),
-    val customerTrend: AnalyticsTrend = AnalyticsTrend()
-) {
-    val hasData: Boolean
-        get() = metrics.isNotEmpty() || alerts.isNotEmpty()
-}
-data class AnalyticsSummary(
-    val title: String = "لوحة التحليلات",
-    val subtitle: String? = null,
-    val totalMetrics: Int = 0,
-    val positiveMetrics: Int = 0,
-    val negativeMetrics: Int = 0,
-    val totalAlerts: Int = 0,
-    val criticalAlerts: Int = 0,
-    val hasSalesGrowth: Boolean = false,
-    val hasStockRisk: Boolean = false,
-    val hasProfitData: Boolean = false,
-    val currencyCode: String = "SDG"
-)
-data class AnalyticsTrend(
-    val current: BigDecimal = BigDecimal.ZERO,
-    val reference: BigDecimal = BigDecimal.ZERO,
-    val changePercent: BigDecimal = BigDecimal.ZERO,
-    val label: String = "ثابت",
-    val isPositive: Boolean = true
-)
-private fun Int.toBigDecimal(): BigDecimal = BigDecimal.valueOf(toLong())
-private fun BigDecimal.money(): BigDecimal = setScale(2, RoundingMode.HALF_UP)
-
-------------------------------
-FILE: CheckDashboardAccess.kt
-------------------------------
-package com.myimdad_por.domain.usecase.dashboard
-import com.myimdad_por.domain.model.Dashboard
-import com.myimdad_por.domain.model.DashboardQuickAction
-class CheckDashboardAccess {
-    operator fun invoke(
-        dashboard: Dashboard?,
-        permissions: DashboardPermissions = DashboardPermissions()
-    ): DashboardAccessResult {
-        if (dashboard == null) {
-            return DashboardAccessResult(
-                canAccessDashboard = false,
-                allowedQuickActions = emptyList(),
-                deniedQuickActions = emptyList(),
-                reason = "لا توجد بيانات لوحة تحكم متاحة"
-            )
-        }
-        val allowedActions = dashboard.quickActions.filter { action ->
-            action.isEnabled && isActionAllowed(action, permissions)
-        }
-        val deniedActions = dashboard.quickActions.filterNot { action ->
-            action.isEnabled && isActionAllowed(action, permissions)
-        }
-        val canAccessDashboard = permissions.canViewDashboard
-        return DashboardAccessResult(
-            canAccessDashboard = canAccessDashboard,
-            allowedQuickActions = allowedActions,
-            deniedQuickActions = deniedActions,
-            reason = when {
-                !canAccessDashboard -> "ليس لديك صلاحية عرض لوحة التحكم"
-                dashboard.quickActions.isEmpty() -> "لوحة التحكم متاحة لكن لا توجد إجراءات سريعة"
-                else -> null
+        color = Color.Transparent
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Layout.screenPadding),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = AppDimens.Layout.contentMaxWidth),
+                shape = RoundedCornerShape(AppDimens.Radius.large),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.medium)
+            ) {
+                ErrorStateContent(
+                    title = title,
+                    message = message,
+                    details = details,
+                    retryText = retryText,
+                    dismissText = dismissText,
+                    onRetry = onRetry,
+                    onDismiss = onDismiss
+                )
             }
-        )
-    }
-    private fun isActionAllowed(
-        action: DashboardQuickAction,
-        permissions: DashboardPermissions
-    ): Boolean {
-        val requiredPermission = action.requiresPermission?.trim().orEmpty()
-        return when {
-            requiredPermission.isBlank() -> true
-            requiredPermission.equals(PermissionNames.VIEW_SALES, ignoreCase = true) -> permissions.canViewSales
-            requiredPermission.equals(PermissionNames.CREATE_SALES, ignoreCase = true) -> permissions.canCreateSales
-            requiredPermission.equals(PermissionNames.VIEW_CUSTOMERS, ignoreCase = true) -> permissions.canViewCustomers
-            requiredPermission.equals(PermissionNames.VIEW_INVENTORY, ignoreCase = true) -> permissions.canViewInventory
-            requiredPermission.equals(PermissionNames.VIEW_REPORTS, ignoreCase = true) -> permissions.canViewReports
-            requiredPermission.equals(PermissionNames.VIEW_FINANCE, ignoreCase = true) -> permissions.canViewFinance
-            else -> permissions.customPermissions.contains(requiredPermission)
         }
     }
 }
-data class DashboardPermissions(
-    val canViewDashboard: Boolean = true,
-    val canViewSales: Boolean = true,
-    val canCreateSales: Boolean = true,
-    val canViewCustomers: Boolean = true,
-    val canViewInventory: Boolean = true,
-    val canViewReports: Boolean = true,
-    val canViewFinance: Boolean = true,
-    val customPermissions: Set<String> = emptySet()
-)
-data class DashboardAccessResult(
-    val canAccessDashboard: Boolean,
-    val allowedQuickActions: List<DashboardQuickAction>,
-    val deniedQuickActions: List<DashboardQuickAction>,
-    val reason: String? = null
+@Composable
+fun CardErrorState(
+    title: String,
+    message: String,
+    modifier: Modifier = Modifier,
+    details: String? = null,
+    retryText: String = "إعادة المحاولة",
+    dismissText: String? = null,
+    onRetry: (() -> Unit)? = null,
+    onDismiss: (() -> Unit)? = null,
+    contentDescription: String? = null
 ) {
-    val hasAllowedActions: Boolean
-        get() = allowedQuickActions.isNotEmpty()
-    val hasDeniedActions: Boolean
-        get() = deniedQuickActions.isNotEmpty()
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics {
+                role = Role.Image
+                if (!contentDescription.isNullOrBlank()) {
+                    this.contentDescription = contentDescription
+                }
+            },
+        shape = RoundedCornerShape(AppDimens.Radius.large),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.low)
+    ) {
+        ErrorStateContent(
+            title = title,
+            message = message,
+            details = details,
+            retryText = retryText,
+            dismissText = dismissText,
+            onRetry = onRetry,
+            onDismiss = onDismiss
+        )
+    }
 }
-private object PermissionNames {
-    const val VIEW_SALES = "VIEW_SALES"
-    const val CREATE_SALES = "CREATE_SALES"
-    const val VIEW_CUSTOMERS = "VIEW_CUSTOMERS"
-    const val VIEW_INVENTORY = "VIEW_INVENTORY"
-    const val VIEW_REPORTS = "VIEW_REPORTS"
-    const val VIEW_FINANCE = "VIEW_FINANCE"
-}
-
-------------------------------
-FILE: CalculateKpis.kt
-------------------------------
-package com.myimdad_por.domain.usecase.dashboard
-import com.myimdad_por.domain.model.Dashboard
-import com.myimdad_por.domain.model.DashboardMetric
-import com.myimdad_por.domain.model.money
-import java.math.BigDecimal
-import java.math.RoundingMode
-class CalculateKpis {
-    operator fun invoke(dashboard: Dashboard?): List<DashboardMetric> {
-        if (dashboard == null) return emptyList()
-        val sales = dashboard.sales
-        val inventory = dashboard.inventory
-        val customers = dashboard.customers
-        val financial = dashboard.financial
-        val metrics = buildList {
-            add(
-                DashboardMetric(
-                    key = "today_sales_count",
-                    label = "مبيعات اليوم",
-                    value = dashboard.sales.todaySalesCount.toBigDecimal(),
-                    formattedValue = dashboard.sales.todaySalesCount.toString(),
-                    deltaPercent = dashboard.sales.growthRatePercent,
-                    deltaLabel = dashboard.sales.growthRatePercent?.let { "نمو المبيعات" },
-                    isPositiveTrend = (dashboard.sales.growthRatePercent ?: BigDecimal.ZERO) >= BigDecimal.ZERO,
-                    accentKey = "sales"
+@Composable
+fun InlineErrorState(
+    title: String,
+    message: String,
+    modifier: Modifier = Modifier,
+    details: String? = null,
+    retryText: String = "إعادة المحاولة",
+    dismissText: String? = null,
+    onRetry: (() -> Unit)? = null,
+    onDismiss: (() -> Unit)? = null,
+    contentDescription: String? = null
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics {
+                role = Role.Image
+                if (!contentDescription.isNullOrBlank()) {
+                    this.contentDescription = contentDescription
+                }
+            },
+        color = Color.Transparent
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    color = ErrorContainer,
+                    shape = RoundedCornerShape(AppDimens.Radius.large)
                 )
-            )
-            add(
-                DashboardMetric(
-                    key = "today_revenue",
-                    label = "إيراد اليوم",
-                    value = sales.todayRevenue.money(),
-                    formattedValue = sales.todayRevenue.money().toPlainString(),
-                    deltaPercent = null,
-                    deltaLabel = null,
-                    isPositiveTrend = true,
-                    accentKey = "revenue"
+                .padding(AppDimens.Layout.screenPadding),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
+        ) {
+            ErrorBadge()
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
+            ) {
+                Text(
+                    text = title,
+                    style = AppTypography.titleMedium,
+                    color = TextPrimaryColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-            )
-            add(
-                DashboardMetric(
-                    key = "month_revenue",
-                    label = "إيراد الشهر",
-                    value = sales.monthRevenue.money(),
-                    formattedValue = sales.monthRevenue.money().toPlainString(),
-                    deltaPercent = sales.growthRatePercent,
-                    deltaLabel = sales.growthRatePercent?.let { "مقارنة بالشهر السابق" },
-                    isPositiveTrend = (sales.growthRatePercent ?: BigDecimal.ZERO) >= BigDecimal.ZERO,
-                    accentKey = "month_revenue"
+                Text(
+                    text = message,
+                    style = AppTypography.bodyMedium,
+                    color = TextSecondaryColor
                 )
-            )
-            add(
-                DashboardMetric(
-                    key = "pending_invoices",
-                    label = "فواتير معلقة",
-                    value = sales.pendingInvoicesCount.toBigDecimal(),
-                    formattedValue = sales.pendingInvoicesCount.toString(),
-                    deltaPercent = null,
-                    deltaLabel = null,
-                    isPositiveTrend = false,
-                    accentKey = "pending"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "returns_count",
-                    label = "المرتجعات",
-                    value = sales.returnsCount.toBigDecimal(),
-                    formattedValue = sales.returnsCount.toString(),
-                    deltaPercent = null,
-                    deltaLabel = null,
-                    isPositiveTrend = false,
-                    accentKey = "returns"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "products_count",
-                    label = "عدد المنتجات",
-                    value = inventory.productsCount.toBigDecimal(),
-                    formattedValue = inventory.productsCount.toString(),
-                    deltaPercent = null,
-                    deltaLabel = null,
-                    isPositiveTrend = true,
-                    accentKey = "inventory"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "low_stock_count",
-                    label = "منخفض المخزون",
-                    value = inventory.lowStockCount.toBigDecimal(),
-                    formattedValue = inventory.lowStockCount.toString(),
-                    deltaPercent = null,
-                    deltaLabel = null,
-                    isPositiveTrend = false,
-                    accentKey = "low_stock"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "out_of_stock_count",
-                    label = "نفد المخزون",
-                    value = inventory.outOfStockCount.toBigDecimal(),
-                    formattedValue = inventory.outOfStockCount.toString(),
-                    deltaPercent = null,
-                    deltaLabel = null,
-                    isPositiveTrend = false,
-                    accentKey = "out_of_stock"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "customers_count",
-                    label = "العملاء",
-                    value = customers.customersCount.toBigDecimal(),
-                    formattedValue = customers.customersCount.toString(),
-                    deltaPercent = null,
-                    deltaLabel = null,
-                    isPositiveTrend = true,
-                    accentKey = "customers"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "new_customers_count",
-                    label = "عملاء جدد",
-                    value = customers.newCustomersCount.toBigDecimal(),
-                    formattedValue = customers.newCustomersCount.toString(),
-                    deltaPercent = null,
-                    deltaLabel = null,
-                    isPositiveTrend = true,
-                    accentKey = "new_customers"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "net_balance",
-                    label = "صافي الرصيد",
-                    value = financial.netBalance.money(),
-                    formattedValue = financial.netBalance.money().toPlainString(),
-                    deltaPercent = null,
-                    deltaLabel = null,
-                    isPositiveTrend = financial.netBalance >= BigDecimal.ZERO,
-                    accentKey = "finance"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "receivables",
-                    label = "الذمم المدينة",
-                    value = financial.receivables.money(),
-                    formattedValue = financial.receivables.money().toPlainString(),
-                    deltaPercent = null,
-                    deltaLabel = null,
-                    isPositiveTrend = false,
-                    accentKey = "receivables"
-                )
-            )
-            add(
-                DashboardMetric(
-                    key = "payables",
-                    label = "الذمم الدائنة",
-                    value = financial.payables.money(),
-                    formattedValue = financial.payables.money().toPlainString(),
-                    deltaPercent = null,
-                    deltaLabel = null,
-                    isPositiveTrend = false,
-                    accentKey = "payables"
-                )
-            )
-            financial.profitEstimate?.let { profit ->
-                add(
-                    DashboardMetric(
-                        key = "profit_estimate",
-                        label = "الربح التقديري",
-                        value = profit.money(),
-                        formattedValue = profit.money().toPlainString(),
-                        deltaPercent = null,
-                        deltaLabel = null,
-                        isPositiveTrend = profit >= BigDecimal.ZERO,
-                        accentKey = "profit"
+                if (!details.isNullOrBlank()) {
+                    Text(
+                        text = details,
+                        style = AppTypography.bodySmall,
+                        color = TextSecondaryColor
                     )
+                }
+                ErrorActionsRow(
+                    retryText = retryText,
+                    dismissText = dismissText,
+                    onRetry = onRetry,
+                    onDismiss = onDismiss
                 )
             }
         }
-        return metrics.sortedWith(
-            compareBy<DashboardMetric> { metricPriority(it.key) }
-                .thenBy { it.label }
+    }
+}
+@Composable
+private fun ErrorStateContent(
+    title: String,
+    message: String,
+    details: String?,
+    retryText: String,
+    dismissText: String?,
+    onRetry: (() -> Unit)?,
+    onDismiss: (() -> Unit)?
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(ErrorContainer)
+            .padding(AppDimens.Layout.screenPadding),
+        verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
+        ) {
+            ErrorBadge()
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.extraSmall)
+            ) {
+                Text(
+                    text = title,
+                    style = AppTypography.titleLarge,
+                    color = TextPrimaryColor,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = message,
+                    style = AppTypography.bodyLarge,
+                    color = TextSecondaryColor
+                )
+            }
+        }
+        if (!details.isNullOrBlank()) {
+            Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+            Text(
+                text = details,
+                style = AppTypography.bodyMedium,
+                color = TextSecondaryColor
+            )
+        }
+        ErrorActionsRow(
+            retryText = retryText,
+            dismissText = dismissText,
+            onRetry = onRetry,
+            onDismiss = onDismiss
         )
     }
-    private fun metricPriority(key: String): Int {
-        return when (key) {
-            "today_sales_count" -> 0
-            "today_revenue" -> 1
-            "month_revenue" -> 2
-            "pending_invoices" -> 3
-            "returns_count" -> 4
-            "products_count" -> 5
-            "low_stock_count" -> 6
-            "out_of_stock_count" -> 7
-            "customers_count" -> 8
-            "new_customers_count" -> 9
-            "net_balance" -> 10
-            "receivables" -> 11
-            "payables" -> 12
-            "profit_estimate" -> 13
-            else -> 99
+}
+@Composable
+private fun ErrorActionsRow(
+    retryText: String,
+    dismissText: String?,
+    onRetry: (() -> Unit)?,
+    onDismiss: (() -> Unit)?
+) {
+    if (onRetry == null && onDismiss == null) return
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (onRetry != null) {
+            AppButton(
+                text = retryText,
+                onClick = onRetry,
+                variant = AppButtonVariant.Primary,
+                fullWidth = false
+            )
+        }
+        if (onDismiss != null) {
+            AppButton(
+                text = dismissText ?: "إغلاق",
+                onClick = onDismiss,
+                variant = AppButtonVariant.Outlined,
+                fullWidth = false
+            )
         }
     }
 }
-private fun Int.toBigDecimal(): BigDecimal = BigDecimal.valueOf(toLong())
+@Composable
+private fun ErrorBadge() {
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .background(
+                color = Color.White.copy(alpha = 0.8f),
+                shape = RoundedCornerShape(AppDimens.Radius.round)
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "!",
+            style = AppTypography.titleLarge,
+            color = ErrorColor,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+------------------------------
+FILE: LoadingIndicator.kt
+------------------------------
+package com.myimdad_por.ui.components
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.myimdad_por.ui.theme.AppDimens
+import com.myimdad_por.ui.theme.AppShapeTokens
+import com.myimdad_por.ui.theme.AppTypography
+enum class LoadingIndicatorVariant {
+    Circular,
+    Linear,
+    Dots
+}
+enum class LoadingIndicatorSize(
+    val indicatorSize: Dp,
+    val strokeWidth: Dp
+) {
+    Small(
+        indicatorSize = 20.dp,
+        strokeWidth = 2.dp
+    ),
+    Medium(
+        indicatorSize = 32.dp,
+        strokeWidth = 3.dp
+    ),
+    Large(
+        indicatorSize = 48.dp,
+        strokeWidth = 4.dp
+    )
+}
+@Composable
+fun LoadingIndicator(
+    modifier: Modifier = Modifier,
+    variant: LoadingIndicatorVariant = LoadingIndicatorVariant.Circular,
+    size: LoadingIndicatorSize = LoadingIndicatorSize.Medium,
+    title: String? = null,
+    message: String? = null,
+    progress: Float? = null,
+    tint: Color? = null,
+    trackColor: Color? = null,
+    centered: Boolean = true,
+    contentPadding: PaddingValues = PaddingValues(AppDimens.Spacing.large),
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val resolvedTint = tint ?: colorScheme.primary
+    val resolvedTrackColor = trackColor ?: resolvedTint.copy(alpha = 0.16f)
+    val accessibilityText = title ?: message ?: "جاري التحميل"
+    val semanticsModifier = Modifier.semantics {
+        contentDescription = accessibilityText
+        liveRegion = LiveRegionMode.Polite
+    }
+    if (centered) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .then(semanticsModifier),
+            contentAlignment = Alignment.Center
+        ) {
+            LoadingContent(
+                variant = variant,
+                size = size,
+                title = title,
+                message = message,
+                progress = progress,
+                tint = resolvedTint,
+                trackColor = resolvedTrackColor,
+                contentPadding = contentPadding
+            )
+        }
+    } else {
+        LoadingContent(
+            modifier = modifier.then(semanticsModifier),
+            variant = variant,
+            size = size,
+            title = title,
+            message = message,
+            progress = progress,
+            tint = resolvedTint,
+            trackColor = resolvedTrackColor,
+            contentPadding = contentPadding
+        )
+    }
+}
+@Composable
+private fun LoadingContent(
+    modifier: Modifier = Modifier,
+    variant: LoadingIndicatorVariant,
+    size: LoadingIndicatorSize,
+    title: String?,
+    message: String?,
+    progress: Float?,
+    tint: Color,
+    trackColor: Color,
+    contentPadding: PaddingValues,
+) {
+    when (variant) {
+        LoadingIndicatorVariant.Circular -> {
+            LoadingSurface(
+                modifier = modifier,
+                contentPadding = contentPadding
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    if (progress != null) {
+                        CircularProgressIndicator(
+                            progress = progress.coerceIn(0f, 1f),
+                            modifier = Modifier.size(size.indicatorSize),
+                            color = tint,
+                            trackColor = trackColor,
+                            strokeWidth = size.strokeWidth
+                        )
+                    } else {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(size.indicatorSize),
+                            color = tint,
+                            trackColor = trackColor,
+                            strokeWidth = size.strokeWidth
+                        )
+                    }
+                    if (title != null || message != null) {
+                        Spacer(modifier = Modifier.height(AppDimens.Spacing.medium))
+                        LoadingTexts(
+                            title = title,
+                            message = message,
+                            centered = true
+                        )
+                    }
+                }
+            }
+        }
+        LoadingIndicatorVariant.Linear -> {
+            LoadingSurface(
+                modifier = modifier.fillMaxWidth(),
+                contentPadding = contentPadding
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    if (title != null || message != null) {
+                        LoadingTexts(
+                            title = title,
+                            message = message,
+                            centered = false
+                        )
+                        Spacer(modifier = Modifier.height(AppDimens.Spacing.medium))
+                    }
+                    if (progress != null) {
+                        LinearProgressIndicator(
+                            progress = progress.coerceIn(0f, 1f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp),
+                            color = tint,
+                            trackColor = trackColor
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp),
+                            color = tint,
+                            trackColor = trackColor
+                        )
+                    }
+                }
+            }
+        }
+        LoadingIndicatorVariant.Dots -> {
+            LoadingSurface(
+                modifier = modifier,
+                contentPadding = contentPadding
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    DotsLoadingIndicator(tint = tint)
+                    if (title != null || message != null) {
+                        Spacer(modifier = Modifier.height(AppDimens.Spacing.medium))
+                        LoadingTexts(
+                            title = title,
+                            message = message,
+                            centered = true
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+@Composable
+private fun LoadingSurface(
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues,
+    content: @Composable () -> Unit
+) {
+    Surface(
+        modifier = modifier.wrapContentHeight(),
+        shape = AppShapeTokens.dialog,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 4.dp
+    ) {
+        Box(
+            modifier = Modifier.padding(contentPadding),
+            contentAlignment = Alignment.Center
+        ) {
+            content()
+        }
+    }
+}
+@Composable
+private fun LoadingTexts(
+    title: String?,
+    message: String?,
+    centered: Boolean
+) {
+    val horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start
+    Column(horizontalAlignment = horizontalAlignment) {
+        if (title != null) {
+            Text(
+                text = title,
+                style = AppTypography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        if (message != null) {
+            if (title != null) {
+                Spacer(modifier = Modifier.height(AppDimens.Spacing.extraSmall))
+            }
+            Text(
+                text = message,
+                style = AppTypography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+@Composable
+private fun DotsLoadingIndicator(
+    tint: Color
+) {
+    val transition = rememberInfiniteTransition(label = "dots_loading")
+    val dot1 by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dot1"
+    )
+    val dot2 by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 600, delayMillis = 150),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dot2"
+    )
+    val dot3 by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 600, delayMillis = 300),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dot3"
+    )
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Dot(tint = tint, alpha = dot1)
+        Dot(tint = tint, alpha = dot2)
+        Dot(tint = tint, alpha = dot3)
+    }
+}
+@Composable
+private fun Dot(
+    tint: Color,
+    alpha: Float
+) {
+    Box(
+        modifier = Modifier
+            .size(8.dp)
+            .background(
+                color = tint.copy(alpha = alpha),
+                shape = RoundedCornerShape(50)
+            )
+    )
+}
+@Composable
+fun LoadingOverlay(
+    modifier: Modifier = Modifier,
+    visible: Boolean,
+    title: String? = null,
+    message: String? = null,
+    variant: LoadingIndicatorVariant = LoadingIndicatorVariant.Circular,
+    size: LoadingIndicatorSize = LoadingIndicatorSize.Medium,
+    tint: Color? = null,
+    trackColor: Color? = null,
+    content: @Composable BoxScope.() -> Unit
+) {
+    val resolvedTint = tint ?: MaterialTheme.colorScheme.primary
+    val resolvedTrackColor = trackColor ?: resolvedTint.copy(alpha = 0.16f)
+    Box(modifier = modifier.fillMaxSize()) {
+        content()
+        if (visible) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)),
+                contentAlignment = Alignment.Center
+            ) {
+                LoadingIndicator(
+                    variant = variant,
+                    size = size,
+                    title = title,
+                    message = message,
+                    tint = resolvedTint,
+                    trackColor = resolvedTrackColor,
+                    centered = true
+                )
+            }
+        }
+    }
+}
+@Composable
+fun LoadingInline(
+    modifier: Modifier = Modifier,
+    text: String = "جاري التحميل",
+    tint: Color? = null
+) {
+    val resolvedTint = tint ?: MaterialTheme.colorScheme.primary
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(18.dp),
+            color = resolvedTint,
+            strokeWidth = 2.dp
+        )
+        Spacer(modifier = Modifier.width(AppDimens.Spacing.small))
+        Text(
+            text = text,
+            style = AppTypography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+------------------------------
+FILE: SubscriptionWarningBanner.kt
+------------------------------
+package com.myimdad_por.ui.components
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.myimdad_por.ui.theme.AppDimens
+import com.myimdad_por.ui.theme.AppShapeTokens
+import com.myimdad_por.ui.theme.AppTypography
+import com.myimdad_por.ui.theme.WarningColor
+import com.myimdad_por.ui.theme.WarningContainer
+import com.myimdad_por.ui.theme.TextPrimaryColor
+import com.myimdad_por.ui.theme.TextSecondaryColor
+@Composable
+fun SubscriptionWarningBanner(
+    modifier: Modifier = Modifier,
+    title: String = "تنبيه الاشتراك",
+    message: String? = null,
+    daysRemaining: Int? = null,
+    actionText: String = "تجديد الآن",
+    onActionClick: () -> Unit,
+    onDismissClick: (() -> Unit)? = null,
+    visible: Boolean = true,
+    showIcon: Boolean = true,
+    backgroundColor: Color = WarningContainer,
+    contentColor: Color = TextPrimaryColor,
+    subtitleColor: Color = TextSecondaryColor
+) {
+    if (!visible) return
+    val resolvedMessage = when {
+        !message.isNullOrBlank() -> message
+        daysRemaining != null && daysRemaining > 0 -> "متبقي $daysRemaining يوم قبل انتهاء الاشتراك."
+        daysRemaining == 0 -> "ينتهي الاشتراك اليوم."
+        else -> "الاشتراك يحتاج إلى مراجعة."
+    }
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics {
+                role = Role.Button
+                contentDescription = title
+            },
+        shape = AppShapeTokens.card,
+        color = backgroundColor,
+        contentColor = contentColor,
+        tonalElevation = AppDimens.Elevation.low
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Layout.screenPadding)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.Start
+            ) {
+                if (showIcon) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(
+                                color = WarningColor.copy(alpha = 0.12f),
+                                shape = AppShapeTokens.buttonPill
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.WarningAmber,
+                            contentDescription = null,
+                            tint = WarningColor
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(AppDimens.Spacing.small))
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(top = 2.dp)
+                ) {
+                    Text(
+                        text = title,
+                        style = AppTypography.titleMedium,
+                        color = contentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.size(AppDimens.Spacing.extraSmall))
+                    Text(
+                        text = resolvedMessage,
+                        style = AppTypography.bodyMedium,
+                        color = subtitleColor,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (daysRemaining != null) {
+                        Spacer(modifier = Modifier.size(AppDimens.Spacing.small))
+                        SubscriptionCountdownPill(daysRemaining = daysRemaining)
+                    }
+                }
+            }
+            if (onActionClick != null || onDismissClick != null) {
+                Spacer(modifier = Modifier.size(AppDimens.Spacing.medium))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (onDismissClick != null) {
+                        AppButton(
+                            text = "لاحقًا",
+                            onClick = onDismissClick,
+                            variant = AppButtonVariant.Outlined,
+                            size = AppButtonSize.Small,
+                            fullWidth = false
+                        )
+                        Spacer(modifier = Modifier.width(AppDimens.Spacing.small))
+                    }
+                    AppButton(
+                        text = actionText,
+                        onClick = onActionClick,
+                        variant = AppButtonVariant.Primary,
+                        size = AppButtonSize.Small,
+                        fullWidth = false
+                    )
+                }
+            }
+        }
+    }
+}
+@Composable
+private fun SubscriptionCountdownPill(
+    daysRemaining: Int
+) {
+    val text = when {
+        daysRemaining > 1 -> "متبقي $daysRemaining أيام"
+        daysRemaining == 1 -> "متبقٍ يوم واحد"
+        else -> "ينتهي اليوم"
+    }
+    Surface(
+        shape = AppShapeTokens.chip,
+        color = WarningColor.copy(alpha = 0.16f),
+        contentColor = WarningColor
+    ) {
+        Text(
+            text = text,
+            style = AppTypography.labelMedium,
+            modifier = Modifier
+                .padding(horizontal = AppDimens.Spacing.small, vertical = 4.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+@Composable
+fun SubscriptionExpiredBanner(
+    modifier: Modifier = Modifier,
+    onActionClick: () -> Unit,
+    onDismissClick: (() -> Unit)? = null,
+    visible: Boolean = true
+) {
+    SubscriptionWarningBanner(
+        modifier = modifier,
+        title = "انتهت مدة الاشتراك",
+        message = "يرجى تجديد الاشتراك لمتابعة استخدام جميع ميزات التطبيق.",
+        actionText = "تجديد الاشتراك",
+        onActionClick = onActionClick,
+        onDismissClick = onDismissClick,
+        visible = visible,
+        showIcon = true
+    )
+}
+@Composable
+fun SubscriptionDueSoonBanner(
+    modifier: Modifier = Modifier,
+    daysRemaining: Int,
+    onActionClick: () -> Unit,
+    onDismissClick: (() -> Unit)? = null,
+    visible: Boolean = true
+) {
+    SubscriptionWarningBanner(
+        modifier = modifier,
+        title = "الاشتراك يقترب من الانتهاء",
+        daysRemaining = daysRemaining,
+        actionText = "تجديد الآن",
+        onActionClick = onActionClick,
+        onDismissClick = onDismissClick,
+        visible = visible,
+        showIcon = true
+    )
+}
+
+------------------------------
+FILE: DashboardUiEvent.kt
+------------------------------
+package com.myimdad_por.ui.features.dashboard
+sealed interface DashboardUiEvent {
+    data object Load : DashboardUiEvent
+    data object Refresh : DashboardUiEvent
+    data class ChangePeriod(val period: DashboardPeriod) : DashboardUiEvent
+    data class OnSaleClick(val saleId: String) : DashboardUiEvent
+    data class OnExpenseClick(val expenseId: String) : DashboardUiEvent
+    data class OnReportClick(val reportId: String) : DashboardUiEvent
+    data class OnTransactionClick(val transactionId: String) : DashboardUiEvent
+    data object NavigateToSales : DashboardUiEvent
+    data object NavigateToExpenses : DashboardUiEvent
+    data object NavigateToReports : DashboardUiEvent
+    data object Retry : DashboardUiEvent
+}
+
+------------------------------
+FILE: DashboardUiState.kt
+------------------------------
+package com.myimdad_por.ui.features.dashboard
+import com.myimdad_por.domain.model.Expense
+import com.myimdad_por.domain.model.PaymentTransaction
+import com.myimdad_por.domain.model.Report
+import com.myimdad_por.domain.model.Sale
+import java.math.BigDecimal
+data class DashboardUiState(
+    val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
+    val errorMessage: String? = null,
+    val selectedPeriod: DashboardPeriod = DashboardPeriod.Today,
+    val currencyCode: String = "SDG",
+    val salesCount: Int = 0,
+    val expensesCount: Int = 0,
+    val reportsCount: Int = 0,
+    val paymentTransactionsCount: Int = 0,
+    val pendingPaymentsCount: Int = 0,
+    val paidPaymentsCount: Int = 0,
+    val totalSalesAmount: BigDecimal = BigDecimal.ZERO,
+    val totalExpensesAmount: BigDecimal = BigDecimal.ZERO,
+    val netAmount: BigDecimal = BigDecimal.ZERO,
+    val totalPaidAmount: BigDecimal = BigDecimal.ZERO,
+    val totalPendingAmount: BigDecimal = BigDecimal.ZERO,
+    val recentSales: List<Sale> = emptyList(),
+    val recentExpenses: List<Expense> = emptyList(),
+    val recentReports: List<Report> = emptyList(),
+    val recentTransactions: List<PaymentTransaction> = emptyList(),
+    val canAccessReports: Boolean = false,
+    val canUsePaidFeatures: Boolean = false,
+    val isReadOnlyMode: Boolean = false,
+    val lastUpdatedAtMillis: Long? = null
+) {
+    val hasContent: Boolean
+        get() = recentSales.isNotEmpty() ||
+            recentExpenses.isNotEmpty() ||
+            recentReports.isNotEmpty() ||
+            recentTransactions.isNotEmpty() ||
+            salesCount > 0 ||
+            expensesCount > 0 ||
+            reportsCount > 0 ||
+            paymentTransactionsCount > 0
+    val hasError: Boolean
+        get() = !errorMessage.isNullOrBlank()
+}
+enum class DashboardPeriod {
+    Today,
+    Week,
+    Month,
+    Year,
+    AllTime
+}
+
+------------------------------
+FILE: NavigationActions.kt
+------------------------------
+package com.myimdad_por.ui.navigation
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
+class NavigationActions(
+    private val navController: NavHostController
+) {
+    fun navigateToSplash() = navController.navigateSingleTopTo(ScreenRoutes.Splash)
+    fun navigateToOnboarding() = navController.navigateSingleTopTo(ScreenRoutes.Onboarding)
+    fun navigateToLogin() = navController.navigateSingleTopTo(ScreenRoutes.Login)
+    fun navigateToRegister() = navController.navigateSingleTopTo(ScreenRoutes.Register)
+    fun navigateToForgotPassword() = navController.navigateSingleTopTo(ScreenRoutes.ForgotPassword)
+    fun navigateToHome() = navController.navigateSingleTopTo(ScreenRoutes.Home)
+    fun navigateToDashboard() = navController.navigateSingleTopTo(ScreenRoutes.Dashboard)
+    fun navigateToProfile() = navController.navigateSingleTopTo(ScreenRoutes.Profile)
+    fun navigateToSettings() = navController.navigateSingleTopTo(ScreenRoutes.Settings)
+    fun navigateToNotifications() = navController.navigateSingleTopTo(ScreenRoutes.Notifications)
+    fun navigateToSearch() = navController.navigateSingleTopTo(ScreenRoutes.Search)
+    fun navigateToCustomers() = navController.navigateSingleTopTo(ScreenRoutes.Customers)
+    fun navigateToCustomerCreate() = navController.navigateSingleTopTo(ScreenRoutes.CustomerCreate)
+    fun navigateToCustomerDetails(id: String) = navController.navigate(ScreenRoutes.customerDetails(id))
+    fun navigateToSuppliers() = navController.navigateSingleTopTo(ScreenRoutes.Suppliers)
+    fun navigateToSupplierCreate() = navController.navigateSingleTopTo(ScreenRoutes.SupplierCreate)
+    fun navigateToSupplierDetails(id: String) = navController.navigate(ScreenRoutes.supplierDetails(id))
+    fun navigateToProducts() = navController.navigateSingleTopTo(ScreenRoutes.Products)
+    fun navigateToProductCreate() = navController.navigateSingleTopTo(ScreenRoutes.ProductCreate)
+    fun navigateToProductDetails(id: String) = navController.navigate(ScreenRoutes.productDetails(id))
+    fun navigateToInventory() = navController.navigateSingleTopTo(ScreenRoutes.Inventory)
+    fun navigateToStockMovement() = navController.navigateSingleTopTo(ScreenRoutes.StockMovement)
+    fun navigateToInvoices() = navController.navigateSingleTopTo(ScreenRoutes.Invoices)
+    fun navigateToInvoiceCreate() = navController.navigateSingleTopTo(ScreenRoutes.InvoiceCreate)
+    fun navigateToInvoiceDetails(id: String) = navController.navigate(ScreenRoutes.invoiceDetails(id))
+    fun navigateToPurchases() = navController.navigateSingleTopTo(ScreenRoutes.Purchases)
+    fun navigateToPurchaseCreate() = navController.navigateSingleTopTo(ScreenRoutes.PurchaseCreate)
+    fun navigateToPurchaseDetails(id: String) = navController.navigate(ScreenRoutes.purchaseDetails(id))
+    fun navigateToSales() = navController.navigateSingleTopTo(ScreenRoutes.Sales)
+    fun navigateToSaleCreate() = navController.navigateSingleTopTo(ScreenRoutes.SaleCreate)
+    fun navigateToSaleDetails(id: String) = navController.navigate(ScreenRoutes.saleDetails(id))
+    fun navigateToPayments() = navController.navigateSingleTopTo(ScreenRoutes.Payments)
+    fun navigateToPaymentCreate() = navController.navigateSingleTopTo(ScreenRoutes.PaymentCreate)
+    fun navigateToPaymentDetails(id: String) = navController.navigate(ScreenRoutes.paymentDetails(id))
+    fun navigateToReturns() = navController.navigateSingleTopTo(ScreenRoutes.Returns)
+    fun navigateToReturnCreate() = navController.navigateSingleTopTo(ScreenRoutes.ReturnCreate)
+    fun navigateToReturnDetails(id: String) = navController.navigate(ScreenRoutes.returnDetails(id))
+    fun navigateToExpenses() = navController.navigateSingleTopTo(ScreenRoutes.Expenses)
+    fun navigateToExpenseCreate() = navController.navigateSingleTopTo(ScreenRoutes.ExpenseCreate)
+    fun navigateToExpenseDetails(id: String) = navController.navigate(ScreenRoutes.expenseDetails(id))
+    fun navigateToReports() = navController.navigateSingleTopTo(ScreenRoutes.Reports)
+    fun navigateToAnalytics() = navController.navigateSingleTopTo(ScreenRoutes.Analytics)
+    fun navigateToAuditLogs() = navController.navigateSingleTopTo(ScreenRoutes.AuditLogs)
+    fun navigateToSubscription() = navController.navigateSingleTopTo(ScreenRoutes.Subscription)
+    fun navigateToSubscriptionExpired() = navController.navigateSingleTopTo(ScreenRoutes.SubscriptionExpired)
+    fun navigateToSubscriptionRenew() = navController.navigateSingleTopTo(ScreenRoutes.SubscriptionRenew)
+    fun navigateBack() {
+        navController.popBackStack()
+    }
+    fun navigateBackTo(route: String, inclusive: Boolean = false) {
+        navController.popBackStack(route, inclusive)
+    }
+    fun clearBackStackAndGoToHome() {
+        navController.navigate(ScreenRoutes.Home) {
+            popUpTo(0)
+            launchSingleTop = true
+            restoreState = false
+        }
+    }
+    private fun NavHostController.navigateSingleTopTo(route: String) {
+        navigate(route) {
+            launchSingleTop = true
+            restoreState = true
+            popUpTo(graph.findStartDestination().id) {
+                saveState = true
+            }
+        }
+    }
+}
+
+------------------------------
+FILE: ScreenRoutes.kt
+------------------------------
+package com.myimdad_por.ui.navigation
+object ScreenRoutes {
+    const val Splash = "splash"
+    const val Onboarding = "onboarding"
+    const val Login = "login"
+    const val Register = "register"
+    const val ForgotPassword = "forgot_password"
+    const val Home = "home"
+    const val Dashboard = "dashboard"
+    const val Profile = "profile"
+    const val Settings = "settings"
+    const val Notifications = "notifications"
+    const val Search = "search"
+    const val Customers = "customers"
+    const val CustomerCreate = "customer_create"
+    const val Suppliers = "suppliers"
+    const val SupplierCreate = "supplier_create"
+    const val Products = "products"
+    const val ProductCreate = "product_create"
+    const val Inventory = "inventory"
+    const val StockMovement = "stock_movement"
+    const val Invoices = "invoices"
+    const val InvoiceCreate = "invoice_create"
+    const val Purchases = "purchases"
+    const val PurchaseCreate = "purchase_create"
+    const val Sales = "sales"
+    const val SaleCreate = "sale_create"
+    const val Payments = "payments"
+    const val PaymentCreate = "payment_create"
+    const val Returns = "returns"
+    const val ReturnCreate = "return_create"
+    const val Expenses = "expenses"
+    const val ExpenseCreate = "expense_create"
+    const val Reports = "reports"
+    const val Analytics = "analytics"
+    const val AuditLogs = "audit_logs"
+    const val Subscription = "subscription"
+    const val SubscriptionExpired = "subscription_expired"
+    const val SubscriptionRenew = "subscription_renew"
+    const val ARG_ID = "id"
+    const val ARG_STATUS = "status"
+    const val ARG_MODE = "mode"
+    const val ARG_QUERY = "query"
+    const val CustomerDetailsPattern = "customer_details/{$ARG_ID}"
+    const val SupplierDetailsPattern = "supplier_details/{$ARG_ID}"
+    const val ProductDetailsPattern = "product_details/{$ARG_ID}"
+    const val InvoiceDetailsPattern = "invoice_details/{$ARG_ID}"
+    const val PurchaseDetailsPattern = "purchase_details/{$ARG_ID}"
+    const val SaleDetailsPattern = "sale_details/{$ARG_ID}"
+    const val PaymentDetailsPattern = "payment_details/{$ARG_ID}"
+    const val ReturnDetailsPattern = "return_details/{$ARG_ID}"
+    const val ExpenseDetailsPattern = "expense_details/{$ARG_ID}"
+    fun customerDetails(id: String): String = "customer_details/$id"
+    fun supplierDetails(id: String): String = "supplier_details/$id"
+    fun productDetails(id: String): String = "product_details/$id"
+    fun invoiceDetails(id: String): String = "invoice_details/$id"
+    fun purchaseDetails(id: String): String = "purchase_details/$id"
+    fun saleDetails(id: String): String = "sale_details/$id"
+    fun paymentDetails(id: String): String = "payment_details/$id"
+    fun returnDetails(id: String): String = "return_details/$id"
+    fun expenseDetails(id: String): String = "expense_details/$id"
+    fun search(query: String): String = "search/$query"
+    fun notifications(status: String): String = "notifications/$status"
+}
+
+------------------------------
+FILE: Color.kt
+------------------------------
+package com.myimdad_por.ui.theme
+import androidx.compose.ui.graphics.Color
+val BrandPrimary = Color(0xFF25D366)
+val BrandPrimaryDark = Color(0xFF128C7E)
+val BrandSecondary = Color(0xFF075E54)
+val BrandPrimaryTint = Color(0xFFE7F8EE)
+val BrandPrimarySoft = Color(0xFFF0FFF5)
+val SuccessColor = Color(0xFF1E9E5A)
+val SuccessContainer = Color(0xFFE8F7EE)
+val ErrorColor = Color(0xFFE53935)
+val ErrorContainer = Color(0xFFFDECEC)
+val WarningColor = Color(0xFFFFB300)
+val WarningContainer = Color(0xFFFFF6DB)
+val InfoColor = Color(0xFF1A73E8)
+val InfoContainer = Color(0xFFE8F1FE)
+val IncomeColor = Color(0xFF1E9E5A)
+val IncomeContainer = Color(0xFFE8F7EE)
+val ExpenseColor = Color(0xFFD93025)
+val ExpenseContainer = Color(0xFFFDECEC)
+val CreditColor = Color(0xFF0F9D58)
+val DebitColor = Color(0xFFDB4437)
+val BackgroundColor = Color(0xFFF7F8FA)
+val SurfaceColor = Color(0xFFFFFFFF)
+val SurfaceVariantColor = Color(0xFFF1F3F5)
+val DividerColor = Color(0xFFE9EDEF)
+val BorderColor = Color(0xFFDDE3E8)
+val TextPrimaryColor = Color(0xFF111B21)
+val TextSecondaryColor = Color(0xFF667781)
+val TextTertiaryColor = Color(0xFF8696A0)
+val TextDisabledColor = Color(0xFFADB8C1)
+val IconColor = Color(0xFF54656F)
+val IconMutedColor = Color(0xFF8696A0)
+val IconOnBrandColor = Color(0xFFFFFFFF)
+val IncomingBubbleColor = Color(0xFFFFFFFF)
+val OutgoingBubbleColor = Color(0xFFD9FDD3)
+val IncomingBubbleTextColor = Color(0xFF111B21)
+val OutgoingBubbleTextColor = Color(0xFF111B21)
+val NavigationSelectedColor = Color(0xFF25D366)
+val NavigationUnselectedColor = Color(0xFF667781)
+val FloatingActionButtonColor = Color(0xFF25D366)
+val FloatingActionButtonContentColor = Color(0xFFFFFFFF)
+val BadgeColor = Color(0xFF25D366)
+val BadgeContentColor = Color(0xFFFFFFFF)
+val DarkBackgroundColor = Color(0xFF0B141A)
+val DarkSurfaceColor = Color(0xFF111B21)
+val DarkSurfaceVariantColor = Color(0xFF1F2C33)
+val DarkDividerColor = Color(0xFF2A3942)
+val DarkBorderColor = Color(0xFF33424C)
+val DarkTextPrimaryColor = Color(0xFFE9EDEF)
+val DarkTextSecondaryColor = Color(0xFFAEBAC1)
+val DarkTextTertiaryColor = Color(0xFF8696A0)
+val DarkTextDisabledColor = Color(0xFF6E7B83)
+val DarkIconColor = Color(0xFFAEBAC1)
+val DarkIconMutedColor = Color(0xFF8696A0)
+val DarkIncomingBubbleColor = Color(0xFF202C33)
+val DarkOutgoingBubbleColor = Color(0xFF005C4B)
+val DarkIncomingBubbleTextColor = Color(0xFFE9EDEF)
+val DarkOutgoingBubbleTextColor = Color(0xFFE9EDEF)
+val TransparentColor = Color(0x00000000)
+val WhiteColor = Color(0xFFFFFFFF)
+val BlackColor = Color(0xFF000000)
+
+------------------------------
+FILE: Dimens.kt
+------------------------------
+package com.myimdad_por.ui.theme
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+object AppDimens {
+    object Spacing {
+        val none: Dp = 0.dp
+        val extraSmall: Dp = 4.dp
+        val small: Dp = 8.dp
+        val medium: Dp = 12.dp
+        val normal: Dp = 16.dp
+        val large: Dp = 20.dp
+        val extraLarge: Dp = 24.dp
+        val huge: Dp = 32.dp
+        val xLarge: Dp = 40.dp
+        val xxLarge: Dp = 48.dp
+    }
+    object Radius {
+        val none: Dp = 0.dp
+        val small: Dp = 8.dp
+        val medium: Dp = 12.dp
+        val large: Dp = 16.dp
+        val extraLarge: Dp = 20.dp
+        val round: Dp = 999.dp
+    }
+    object Elevation {
+        val none: Dp = 0.dp
+        val low: Dp = 2.dp
+        val medium: Dp = 4.dp
+        val high: Dp = 8.dp
+        val veryHigh: Dp = 12.dp
+    }
+    object Icon {
+        val tiny: Dp = 14.dp
+        val small: Dp = 18.dp
+        val normal: Dp = 24.dp
+        val large: Dp = 28.dp
+        val extraLarge: Dp = 32.dp
+        val avatar: Dp = 40.dp
+        val fab: Dp = 56.dp
+    }
+    object Component {
+        val chipHeight: Dp = 32.dp
+        val buttonHeight: Dp = 48.dp
+        val textFieldHeight: Dp = 56.dp
+        val topBarHeight: Dp = 64.dp
+        val bottomBarHeight: Dp = 72.dp
+        val avatarSmall: Dp = 32.dp
+        val avatarMedium: Dp = 40.dp
+        val avatarLarge: Dp = 56.dp
+        val cardMinHeight: Dp = 72.dp
+        val dialogMaxWidth: Dp = 320.dp
+        val dividerThickness: Dp = 1.dp
+        val borderThickness: Dp = 1.dp
+    }
+    object Text {
+        val caption = 12.sp
+        val bodySmall = 13.sp
+        val body = 14.sp
+        val bodyLarge = 16.sp
+        val titleSmall = 18.sp
+        val title = 20.sp
+        val headline = 24.sp
+        val display = 30.sp
+    }
+    object Layout {
+        val screenPadding: Dp = 16.dp
+        val sectionPadding: Dp = 20.dp
+        val listItemVerticalPadding: Dp = 12.dp
+        val listItemHorizontalPadding: Dp = 16.dp
+        val contentMaxWidth: Dp = 480.dp
+        val imageHeight: Dp = 180.dp
+        val emptyStateIconSize: Dp = 72.dp
+    }
+    object Chat {
+        val bubbleMaxWidth: Dp = 280.dp
+        val bubblePadding: Dp = 12.dp
+        val messageSpacing: Dp = 8.dp
+    }
+}
+
+------------------------------
+FILE: Theme.kt
+------------------------------
+package com.myimdad_por.ui.theme
+import androidx.compose.ui.graphics.Color
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import com.myimdad_por.R
+private val lightColorScheme = lightColorScheme(
+    primary = BrandPrimary,
+    onPrimary = IconOnBrandColor,
+    primaryContainer = BrandPrimaryTint,
+    onPrimaryContainer = TextPrimaryColor,
+    secondary = BrandSecondary,
+    onSecondary = WhiteColor,
+    secondaryContainer = BrandPrimarySoft,
+    onSecondaryContainer = TextPrimaryColor,
+    tertiary = InfoColor,
+    onTertiary = WhiteColor,
+    tertiaryContainer = InfoContainer,
+    onTertiaryContainer = TextPrimaryColor,
+    error = ErrorColor,
+    onError = WhiteColor,
+    errorContainer = ErrorContainer,
+    onErrorContainer = TextPrimaryColor,
+    background = BackgroundColor,
+    onBackground = TextPrimaryColor,
+    surface = SurfaceColor,
+    onSurface = TextPrimaryColor,
+    surfaceVariant = SurfaceVariantColor,
+    onSurfaceVariant = TextSecondaryColor,
+    outline = BorderColor,
+    outlineVariant = DividerColor,
+    inverseOnSurface = WhiteColor,
+    inverseSurface = DarkSurfaceColor,
+    inversePrimary = BrandPrimary,
+    scrim = BlackColor.copy(alpha = 0.32f)
+)
+private val darkColorScheme = darkColorScheme(
+    primary = BrandPrimary,
+    onPrimary = IconOnBrandColor,
+    primaryContainer = BrandPrimaryDark,
+    onPrimaryContainer = WhiteColor,
+    secondary = BrandPrimarySoft,
+    onSecondary = DarkTextPrimaryColor,
+    secondaryContainer = DarkSurfaceVariantColor,
+    onSecondaryContainer = DarkTextPrimaryColor,
+    tertiary = InfoColor,
+    onTertiary = WhiteColor,
+    tertiaryContainer = DarkSurfaceVariantColor,
+    onTertiaryContainer = DarkTextPrimaryColor,
+    error = ErrorColor,
+    onError = WhiteColor,
+    errorContainer = Color(0xFF5A1A1A),
+    onErrorContainer = DarkTextPrimaryColor,
+    background = DarkBackgroundColor,
+    onBackground = DarkTextPrimaryColor,
+    surface = DarkSurfaceColor,
+    onSurface = DarkTextPrimaryColor,
+    surfaceVariant = DarkSurfaceVariantColor,
+    onSurfaceVariant = DarkTextSecondaryColor,
+    outline = DarkBorderColor,
+    outlineVariant = DarkDividerColor,
+    inverseOnSurface = TextPrimaryColor,
+    inverseSurface = SurfaceColor,
+    inversePrimary = BrandPrimary,
+    scrim = BlackColor.copy(alpha = 0.45f)
+)
+@Composable
+fun ImdadPorTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    dynamicColor: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val colors = when {
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        }
+        darkTheme -> darkColorScheme
+        else -> lightColorScheme
+    }
+    SideEffect {
+        context.findActivity()?.window?.let { window ->
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.isAppearanceLightStatusBars = !darkTheme
+            controller.isAppearanceLightNavigationBars = !darkTheme
+            window.statusBarColor = colors.surface.toArgb()
+            window.navigationBarColor = colors.surface.toArgb()
+        }
+    }
+    MaterialTheme(
+        colorScheme = colors,
+        typography = AppTypography,
+        shapes = AppShapes,
+        content = content
+    )
+}
+@Composable
+fun AppTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    dynamicColor: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    ImdadPorTheme(
+        darkTheme = darkTheme,
+        dynamicColor = dynamicColor,
+        content = content
+    )
+}
+fun provideLightColorScheme(): ColorScheme = lightColorScheme
+fun provideDarkColorScheme(): ColorScheme = darkColorScheme
+private tailrec fun Context.findActivity(): Activity? {
+    return when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
+}
 

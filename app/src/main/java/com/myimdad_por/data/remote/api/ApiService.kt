@@ -14,4 +14,6 @@ interface ApiService :
     ExpenseApiService,
     AccountingApiService,
     AuditLogApiService,
-    SubscriptionApiService
+    SubscriptionApiService, 
+    DashboardApiService, 
+    ReportApiService
