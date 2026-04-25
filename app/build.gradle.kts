@@ -26,13 +26,17 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
+        kotlinOptions {
         jvmTarget = "17"
-        freeCompilerArgs += listOf(
+        freeCompilerArgs = freeCompilerArgs + listOf(
             "-Xjvm-default=all",
-            "-XXLanguage:+DataObjects"
+            "-XXLanguage:+DataObjects",
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+            "-opt-in=androidx.compose.foundation.layout.ExperimentalLayoutApi",
+            "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi"
         )
     }
+
 
     buildFeatures {
         compose = true
@@ -60,6 +64,7 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.0.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("org.jetbrains.kotlin:kotlin-reflect:1.9.20")
+   // implementation("com.github.togisoft:jetpack-compose-phone-number-input:1.1.0")
 
     // Compose BOM: versions are managed by the BOM, so Compose artifacts do not need versions here.
     val composeBom = platform("androidx.compose:compose-bom:2023.10.01")

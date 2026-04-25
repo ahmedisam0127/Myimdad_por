@@ -1,21 +1,25 @@
 package com.myimdad_por.ui.navigation
 
 /**
- * Central place for all navigation routes in the app.
+ * مصدر واحد ثابت لكل مسارات التنقل داخل التطبيق.
  *
- * Keep route names stable and use helper functions for parameterized screens
- * to avoid string duplication across the project.
+ * المبدأ هنا:
+ * - عدم تغيير أي قيمة Route موجودة بالفعل
+ * - إضافة المسارات الناقصة فقط عند الحاجة
+ * - استخدام دوال مساعدة للمسارات الديناميكية بدل تكرار النصوص
  */
 object ScreenRoutes {
 
-    // Core
+    // ───────────────────────── Core ─────────────────────────
+
     const val Splash = "splash"
     const val Onboarding = "onboarding"
     const val Login = "login"
     const val Register = "register"
     const val ForgotPassword = "forgot_password"
 
-    // Main
+    // ───────────────────────── Main ─────────────────────────
+
     const val Home = "home"
     const val Dashboard = "dashboard"
     const val Profile = "profile"
@@ -23,7 +27,8 @@ object ScreenRoutes {
     const val Notifications = "notifications"
     const val Search = "search"
 
-    // Business modules
+    // ───────────────────── Business Modules ─────────────────────
+
     const val Customers = "customers"
     const val CustomerCreate = "customer_create"
     const val Suppliers = "suppliers"
@@ -31,38 +36,51 @@ object ScreenRoutes {
 
     const val Products = "products"
     const val ProductCreate = "product_create"
+
     const val Inventory = "inventory"
     const val StockMovement = "stock_movement"
 
     const val Invoices = "invoices"
     const val InvoiceCreate = "invoice_create"
+
     const val Purchases = "purchases"
     const val PurchaseCreate = "purchase_create"
+
     const val Sales = "sales"
     const val SaleCreate = "sale_create"
 
     const val Payments = "payments"
     const val PaymentCreate = "payment_create"
+
     const val Returns = "returns"
     const val ReturnCreate = "return_create"
+
     const val Expenses = "expenses"
     const val ExpenseCreate = "expense_create"
+
     const val Reports = "reports"
     const val Analytics = "analytics"
     const val AuditLogs = "audit_logs"
 
-    // Subscription / access control
+    // إضافات مفيدة للقائمة الجانبية دون كسر أي روابط سابقة
+    const val Accounting = "accounting"
+    const val Security = "security"
+
+    // ───────────────── Subscription / Access Control ─────────────────
+
     const val Subscription = "subscription"
     const val SubscriptionExpired = "subscription_expired"
     const val SubscriptionRenew = "subscription_renew"
 
-    // Shared arguments
+    // ───────────────────────── Shared Arguments ─────────────────────────
+
     const val ARG_ID = "id"
     const val ARG_STATUS = "status"
     const val ARG_MODE = "mode"
     const val ARG_QUERY = "query"
 
-    // Details routes
+    // ───────────────────────── Detail Patterns ─────────────────────────
+
     const val CustomerDetailsPattern = "customer_details/{$ARG_ID}"
     const val SupplierDetailsPattern = "supplier_details/{$ARG_ID}"
     const val ProductDetailsPattern = "product_details/{$ARG_ID}"
@@ -73,7 +91,8 @@ object ScreenRoutes {
     const val ReturnDetailsPattern = "return_details/{$ARG_ID}"
     const val ExpenseDetailsPattern = "expense_details/{$ARG_ID}"
 
-    // Dynamic route builders
+    // ───────────────────────── Builders ─────────────────────────
+
     fun customerDetails(id: String): String = "customer_details/$id"
     fun supplierDetails(id: String): String = "supplier_details/$id"
     fun productDetails(id: String): String = "product_details/$id"

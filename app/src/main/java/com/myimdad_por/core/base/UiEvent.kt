@@ -8,7 +8,7 @@ package com.myimdad_por.core.base
  * - إغلاق الشاشة
  * - فتح رابط خارجي
  */
-sealed interface UiEvent {
+interface UiEvent{
 
     data class ShowMessage(
         val message: String

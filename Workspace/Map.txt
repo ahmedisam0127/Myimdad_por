@@ -367,10 +367,10 @@
 311. ui/features/sales/SalesScreen.kt ✅
 
 
-312. ui/features/inventory/InventoryUiState.kt
-313. ui/features/inventory/InventoryUiEvent.kt 
-314. ui/features/inventory/InventoryViewModel.kt
-315. ui/features/inventory/InventoryScreen.kt 
+312. ui/features/inventory/InventoryUiState.kt✅
+313. ui/features/inventory/InventoryUiEvent.kt ✅
+314. ui/features/inventory/InventoryViewModel.kt✅
+315. ui/features/inventory/InventoryScreen.kt ✅
 
 
 

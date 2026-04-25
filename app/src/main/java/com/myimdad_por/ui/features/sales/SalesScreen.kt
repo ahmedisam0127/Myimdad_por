@@ -1,8 +1,7 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-
 package com.myimdad_por.ui.features.sales
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,41 +15,46 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Payment
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.myimdad_por.domain.model.Customer
 import com.myimdad_por.domain.model.Product
 import com.myimdad_por.domain.model.Sale
 import com.myimdad_por.domain.model.SaleItem
@@ -59,223 +63,301 @@ import com.myimdad_por.ui.components.AppButtonSize
 import com.myimdad_por.ui.components.AppButtonVariant
 import com.myimdad_por.ui.components.AppTextField
 import com.myimdad_por.ui.components.AppTextFieldSize
+import com.myimdad_por.ui.components.AppTextFieldVariant
+import com.myimdad_por.ui.components.AppTopBar
 import com.myimdad_por.ui.components.ErrorState
 import com.myimdad_por.ui.components.ErrorStateStyle
 import com.myimdad_por.ui.components.LoadingIndicator
 import com.myimdad_por.ui.components.LoadingIndicatorSize
 import com.myimdad_por.ui.components.LoadingIndicatorVariant
-import com.myimdad_por.ui.components.LoadingOverlay
+import com.myimdad_por.ui.components.ProductCard
+import com.myimdad_por.core.utils.CurrencyFormatter
 import com.myimdad_por.ui.theme.AppDimens
-import com.myimdad_por.ui.theme.AppTypography
+import com.myimdad_por.ui.theme.BrandPrimary
+import com.myimdad_por.ui.theme.BrandPrimaryDark
+import com.myimdad_por.ui.theme.BrandPrimarySoft
+import com.myimdad_por.ui.theme.ErrorColor
+import com.myimdad_por.ui.theme.InfoColor
+import com.myimdad_por.ui.theme.SurfaceColor
+import com.myimdad_por.ui.theme.TextPrimaryColor
+import com.myimdad_por.ui.theme.TextSecondaryColor
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.text.NumberFormat
 import java.util.Locale
 
 @Composable
 fun SalesScreen(
     state: SalesUiState,
     onEvent: (SalesUiEvent) -> Unit,
-    modifier: Modifier = Modifier,
-    onNavigateBack: (() -> Unit)? = null
+    modifier: Modifier = Modifier
 ) {
-    val currencyFormatter = remember(state.currencyCode) {
-        createCurrencyFormatter(state.currencyCode)
+    val visibleProducts by remember(state.availableProducts, state.searchQuery) {
+        derivedStateOf {
+            val query = state.searchQuery.trim().lowercase(Locale.getDefault())
+            if (query.isBlank()) {
+                state.availableProducts
+            } else {
+                state.availableProducts.filter { product ->
+                    product.filterableText().contains(query)
+                }
+            }
+        }
     }
 
-    var invoiceTouched by rememberSaveable { mutableStateOf(false) }
-
-    LaunchedEffect(state.errorMessage) {
-        // جاهز للربط مع Snackbar من الحاوية الأعلى عند الحاجة
+    val visibleSales by remember(state.sales, state.searchQuery) {
+        derivedStateOf {
+            val query = state.searchQuery.trim().lowercase(Locale.getDefault())
+            if (query.isBlank()) {
+                state.sales
+            } else {
+                state.sales.filter { sale ->
+                    sale.filterableText().contains(query)
+                }
+            }
+        }
     }
 
-    LoadingOverlay(
-        modifier = modifier,
-        visible = state.isSubmitting,
-        title = "جاري حفظ الفاتورة",
-        message = "يرجى الانتظار...",
-        variant = LoadingIndicatorVariant.Circular,
-        size = LoadingIndicatorSize.Medium
-    ) {
-        Scaffold(
-            topBar = {
-                SalesTopBar(
-                    state = state,
-                    onEvent = onEvent,
-                    onNavigateBack = onNavigateBack
+    val selectedCustomerName = state.selectedCustomer?.displayName.orEmpty()
+    val selectedPaymentMethodName = state.selectedPaymentMethod?.displayName.orEmpty()
+    val hasInitialLoading = state.isLoading && !state.hasContent
+
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        topBar = {
+            AppTopBar(
+                title = "المبيعات",
+                subtitle = buildSalesSubtitle(state),
+                onBackClick = null,
+                actions = {
+                    AppButton(
+                        text = "تحديث",
+                        onClick = { onEvent(SalesUiEvent.Refresh) },
+                        variant = AppButtonVariant.Text,
+                        size = AppButtonSize.Small,
+                        enabled = !state.isSubmitting,
+                        loading = state.isRefreshing,
+                        leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) }
+                    )
+                }
+            )
+        },
+        bottomBar = {
+            SalesBottomBar(
+                state = state,
+                onEvent = onEvent
+            )
+        }
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(paddingValues)
+        ) {
+            if (hasInitialLoading) {
+                LoadingIndicator(
+                    modifier = Modifier.fillMaxSize(),
+                    variant = LoadingIndicatorVariant.Dots,
+                    size = LoadingIndicatorSize.Large,
+                    title = "جاري تجهيز شاشة المبيعات",
+                    message = "يتم تحميل البيانات الأساسية حالياً"
                 )
-            },
-            floatingActionButton = {
-                if (state.canSubmit) {
-                    FloatingActionButton(
-                        onClick = { onEvent(SalesUiEvent.SubmitSale) },
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Add,
-                            contentDescription = "إتمام البيع"
+            }
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = AppDimens.Layout.screenPadding,
+                    end = AppDimens.Layout.screenPadding,
+                    top = AppDimens.Spacing.medium,
+                    bottom = 140.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
+            ) {
+                item {
+                    SalesHeroCard(
+                        state = state,
+                        customerName = selectedCustomerName,
+                        paymentMethodName = selectedPaymentMethodName
+                    )
+                }
+
+                item {
+                    AppTextField(
+                        value = state.searchQuery,
+                        onValueChange = { onEvent(SalesUiEvent.ChangeSearchQuery(it)) },
+                        label = "بحث سريع",
+                        placeholder = "ابحث في المبيعات أو العملاء أو المنتجات",
+                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                        trailingIcon = if (state.searchQuery.isNotBlank()) {
+                            {
+                                AppButton(
+                                    text = "",
+                                    onClick = { onEvent(SalesUiEvent.ChangeSearchQuery("")) },
+                                    variant = AppButtonVariant.Text,
+                                    size = AppButtonSize.Small,
+                                    enabled = !state.isReadOnlyMode,
+                                    leadingIcon = { Icon(Icons.Filled.Clear, contentDescription = null) }
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                        variant = AppTextFieldVariant.Outlined,
+                        size = AppTextFieldSize.Medium,
+                        enabled = !state.isReadOnlyMode
+                    )
+                }
+
+                if (state.hasError) {
+                    item {
+                        ErrorState(
+                            message = state.errorMessage.orEmpty(),
+                            title = "تعذر متابعة المبيعات",
+                            details = validationDetails(state.validationErrors),
+                            onRetry = { onEvent(SalesUiEvent.Retry) },
+                            onDismiss = { onEvent(SalesUiEvent.ClearError) },
+                            style = ErrorStateStyle.Card
                         )
                     }
                 }
-            }
-        ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
-                when {
-                    state.isLoading && !state.hasContent -> {
-                        LoadingIndicator(
-                            modifier = Modifier.fillMaxSize(),
-                            variant = LoadingIndicatorVariant.Circular,
-                            size = LoadingIndicatorSize.Large,
-                            title = "جاري تحميل البيانات",
-                            message = "يتم تجهيز العملاء والمنتجات..."
-                        )
-                    }
 
-                    state.hasError && !state.hasContent -> {
-                        ErrorState(
-                            message = state.errorMessage.orEmpty(),
-                            style = ErrorStateStyle.FullScreen,
-                            onRetry = { onEvent(SalesUiEvent.Retry) },
-                            onDismiss = { onEvent(SalesUiEvent.ClearError) },
-                            contentDescription = "خطأ في شاشة المبيعات"
-                        )
+                if (state.validationErrors.isNotEmpty()) {
+                    item {
+                        ValidationBanner(errors = state.validationErrors.values.toList())
                     }
+                }
 
-                    else -> {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(
-                                horizontal = AppDimens.Layout.screenPadding,
-                                vertical = AppDimens.Spacing.medium
-                            ),
-                            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-                        ) {
-                            item {
-                                if (!state.errorMessage.isNullOrBlank()) {
-                                    ErrorState(
-                                        message = state.errorMessage,
-                                        style = ErrorStateStyle.Inline,
-                                        onRetry = { onEvent(SalesUiEvent.Retry) },
-                                        onDismiss = { onEvent(SalesUiEvent.ClearError) },
-                                        contentDescription = "رسالة خطأ"
-                                    )
+                item {
+                    SectionHeader(
+                        title = "مسودة البيع",
+                        subtitle = if (state.hasDraftItems) {
+                            "${state.itemCount} صنف • ${formatMoney(state.totalAmount, state.currencyCode)}"
+                        } else {
+                            "أضف أصناف البيع أولاً"
+                        },
+                        icon = Icons.Filled.ShoppingCart,
+                        accent = BrandPrimary
+                    )
+                }
+
+                if (state.hasDraftItems) {
+                    items(state.draftItems, key = { saleItemKey(it) }) { item ->
+                        DraftItemCard(
+                            item = item,
+                            currencyCode = state.currencyCode,
+                            enabled = !state.isReadOnlyMode,
+                            onIncrease = {
+                                onEvent(SalesUiEvent.UpdateDraftItem(item.copy(quantity = item.quantity + BigDecimal.ONE)))
+                            },
+                            onDecrease = {
+                                val nextQuantity = item.quantity - BigDecimal.ONE
+                                if (nextQuantity <= BigDecimal.ZERO) {
+                                    onEvent(SalesUiEvent.RemoveDraftItem(saleItemKey(item)))
+                                } else {
+                                    onEvent(SalesUiEvent.UpdateDraftItem(item.copy(quantity = nextQuantity)))
                                 }
-                            }
+                            },
+                            // السطر 261: استخدم الدالة المعرفة في أسفل الملف لجلب المفتاح 
+                            onRemove = { onEvent(SalesUiEvent.RemoveDraftItem(saleItemKey(item))) }
+                        )
+                    }
+                } else {
+                    item {
+                        EmptyCard(
+                            title = "لا توجد أصناف داخل المسودة",
+                            message = "ابدأ بإضافة المنتجات المناسبة إلى عملية البيع الحالية.",
+                            icon = Icons.Filled.ReceiptLong
+                        )
+                    }
+                }
 
-                            item {
-                                SalesSearchCard(
-                                    query = state.searchQuery,
-                                    onQueryChange = { onEvent(SalesUiEvent.ChangeSearchQuery(it)) },
-                                    onClear = { onEvent(SalesUiEvent.ChangeSearchQuery("")) },
-                                    onRefresh = { onEvent(SalesUiEvent.Refresh) },
-                                    loading = state.isRefreshing,
-                                    totalCustomers = state.customers.size,
-                                    totalProducts = state.availableProducts.size,
-                                    totalSales = state.sales.size
-                                )
-                            }
+                item {
+                    TotalsCard(
+                        state = state,
+                        currencyCode = state.currencyCode
+                    )
+                }
 
-                            item {
-                                SalesSummaryCard(
-                                    subtotal = state.subtotalAmount,
-                                    tax = state.taxAmount,
-                                    discount = state.discountAmount,
-                                    total = state.totalAmount,
-                                    paid = state.paidAmount,
-                                    remaining = state.remainingAmount,
-                                    change = state.changeAmount,
-                                    itemCount = state.itemCount,
-                                    totalQuantity = state.totalQuantity,
-                                    currencyFormatter = currencyFormatter
-                                )
-                            }
+                item {
+                    SectionHeader(
+                        title = "تفاصيل العملية",
+                        subtitle = "المعلومات الأساسية قبل الإرسال والحفظ",
+                        icon = Icons.Filled.Payment,
+                        accent = BrandPrimaryDark
+                    )
+                }
 
-                            item {
-                                SalesDraftFormCard(
-                                    state = state,
-                                    currencyFormatter = currencyFormatter,
-                                    onEvent = onEvent,
-                                    invoiceTouched = invoiceTouched,
-                                    onInvoiceTouched = { invoiceTouched = true }
-                                )
-                            }
+                item {
+                    DetailsPanel(
+                        state = state,
+                        onEvent = onEvent,
+                        customerName = selectedCustomerName,
+                        paymentMethodName = selectedPaymentMethodName
+                    )
+                }
 
-                            item {
-                                SalesCustomerAndPaymentCard(
-                                    state = state,
-                                    currencyFormatter = currencyFormatter
-                                )
-                            }
+                item {
+                    SectionHeader(
+                        title = "المنتجات المتاحة",
+                        subtitle = if (visibleProducts.isEmpty()) {
+                            "لا توجد نتائج مطابقة"
+                        } else {
+                            "${visibleProducts.size} منتج جاهز للبيع"
+                        },
+                        icon = Icons.Filled.Inventory2,
+                        accent = InfoColor
+                    )
+                }
 
-                            item {
-                                SalesDraftItemsCard(
-                                    items = state.draftItems,
-                                    currencyFormatter = currencyFormatter,
-                                    onIncrement = { item ->
-                                        onEvent(
-                                            SalesUiEvent.UpdateDraftItem(
-                                                item.copy(quantity = (item.quantity + BigDecimal.ONE).money())
-                                            )
-                                        )
-                                    },
-                                    onDecrement = { item ->
-                                        val next = item.quantity - BigDecimal.ONE
-                                        if (next > BigDecimal.ZERO) {
-                                            onEvent(
-                                                SalesUiEvent.UpdateDraftItem(
-                                                    item.copy(quantity = next.money())
-                                                )
-                                            )
-                                        } else {
-                                            onEvent(SalesUiEvent.RemoveDraftItem(item.id))
-                                        }
-                                    },
-                                    onRemove = { item ->
-                                        onEvent(SalesUiEvent.RemoveDraftItem(item.id))
-                                    }
-                                )
+                if (visibleProducts.isNotEmpty()) {
+                    items(visibleProducts.chunked(2)) { rowProducts ->
+                        ProductRow(
+                            products = rowProducts,
+                            enabled = !state.isReadOnlyMode,
+                            onProductClick = { product ->
+                                onEvent(SalesUiEvent.AddProductToDraft(product, 1))
                             }
+                        )
+                    }
+                } else {
+                    item {
+                        EmptyCard(
+                            title = "لا توجد منتجات ظاهرة الآن",
+                            message = "جرّب تغيير البحث أو أضف بيانات المنتجات من المصدر المرتبط.",
+                            icon = Icons.Filled.Inventory2
+                        )
+                    }
+                }
 
-                            item {
-                                SalesProductsCard(
-                                    products = state.availableProducts,
-                                    currencyFormatter = currencyFormatter,
-                                    onAdd = { product ->
-                                        onEvent(SalesUiEvent.AddProductToDraft(product, 1))
-                                    }
-                                )
-                            }
+                item {
+                    SectionHeader(
+                        title = "أحدث المبيعات",
+                        subtitle = if (visibleSales.isEmpty()) {
+                            "لا توجد مبيعات مطابقة للبحث"
+                        } else {
+                            "${visibleSales.size} عملية بيع ظاهرة"
+                        },
+                        icon = Icons.Filled.TrendingUp,
+                        accent = BrandPrimary
+                    )
+                }
 
-                            item {
-                                SalesCustomersCard(
-                                    customers = state.customers,
-                                    selectedCustomer = state.selectedCustomer,
-                                    onSelect = { onEvent(SalesUiEvent.SelectCustomer(it)) }
-                                )
-                            }
-
-                            item {
-                                SalesHistoryCard(
-                                    sales = state.sales,
-                                    selectedSale = state.selectedSale,
-                                    currencyFormatter = currencyFormatter,
-                                    onSelect = { onEvent(SalesUiEvent.SelectSale(it.id)) }
-                                )
-                            }
-
-                            item {
-                                SalesActionsCard(
-                                    state = state,
-                                    onEvent = onEvent,
-                                    onNavigateBack = onNavigateBack
-                                )
-                            }
-                        }
+                if (visibleSales.isNotEmpty()) {
+                    items(visibleSales.take(8), key = { it.id }) { sale ->
+                        RecentSaleCard(
+                            sale = sale,
+                            currencyCode = state.currencyCode,
+                            onClick = { onEvent(SalesUiEvent.SelectSale(sale.id)) }
+                        )
+                    }
+                } else {
+                    item {
+                        EmptyCard(
+                            title = "لا توجد مبيعات مسجلة",
+                            message = "ستظهر أحدث العمليات هنا بمجرد توفرها.",
+                            icon = Icons.Filled.TrendingUp
+                        )
                     }
                 }
             }
@@ -284,441 +366,420 @@ fun SalesScreen(
 }
 
 @Composable
-private fun SalesTopBar(
+private fun SalesBottomBar(
     state: SalesUiState,
-    onEvent: (SalesUiEvent) -> Unit,
-    onNavigateBack: (() -> Unit)?
+    onEvent: (SalesUiEvent) -> Unit
 ) {
-    TopAppBar(
-        title = {
-            Column {
-                Text(
-                    text = "المبيعات",
-                    style = AppTypography.titleLarge
-                )
-                Text(
-                    text = when {
-                        state.isSubmitting -> "جاري الحفظ"
-                        state.selectedSale != null -> "فاتورة محددة"
-                        state.draftItems.isNotEmpty() -> "فاتورة جديدة"
-                        else -> "ابدأ بإدخال الفاتورة"
-                    },
-                    style = AppTypography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        },
-        navigationIcon = {
-            if (onNavigateBack != null) {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(
-                        imageVector = Icons.Filled.ArrowBack,
-                        contentDescription = "رجوع"
-                    )
-                }
-            }
-        },
-        actions = {
-            IconButton(onClick = { onEvent(SalesUiEvent.Refresh) }) {
-                Icon(Icons.Filled.Refresh, contentDescription = "تحديث")
-            }
-            IconButton(onClick = { onEvent(SalesUiEvent.ResetForm) }) {
-                Icon(Icons.Filled.DeleteOutline, contentDescription = "إعادة ضبط")
-            }
-        },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            titleContentColor = MaterialTheme.colorScheme.onSurface,
-            navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
-            actionIconContentColor = MaterialTheme.colorScheme.onSurface
-        )
-    )
-}
-
-@Composable
-private fun SalesSearchCard(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onClear: () -> Unit,
-    onRefresh: () -> Unit,
-    loading: Boolean,
-    totalCustomers: Int,
-    totalProducts: Int,
-    totalSales: Int
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        tonalElevation = 4.dp,
+        shadowElevation = 8.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
     ) {
         Column(
-            modifier = Modifier.padding(AppDimens.Layout.screenPadding),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Layout.screenPadding),
+            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
         ) {
-            Text("البحث والتحديث", style = AppTypography.titleMedium)
-
-            AppTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                label = "ابحث عن عميل",
-                placeholder = "اكتب اسم العميل",
-                leadingIcon = {
-                    Icon(Icons.Filled.Search, contentDescription = null)
-                },
-                size = AppTextFieldSize.Medium
-            )
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
             ) {
                 AppButton(
-                    text = "تحديث",
-                    onClick = onRefresh,
-                    variant = AppButtonVariant.Secondary,
-                    size = AppButtonSize.Small,
-                    loading = loading
+                    text = "إعادة الضبط",
+                    onClick = { onEvent(SalesUiEvent.ResetForm) },
+                    variant = AppButtonVariant.Outlined,
+                    size = AppButtonSize.Medium,
+                    enabled = !state.isSubmitting && !state.isLoading,
+                    fullWidth = true,
+                    leadingIcon = { Icon(Icons.Filled.Clear, contentDescription = null) }
                 )
                 AppButton(
-                    text = "مسح البحث",
-                    onClick = onClear,
-                    variant = AppButtonVariant.Outlined,
-                    size = AppButtonSize.Small
+                    text = "حفظ كمسودة",
+                    onClick = { onEvent(SalesUiEvent.SaveDraft) },
+                    variant = AppButtonVariant.Secondary,
+                    size = AppButtonSize.Medium,
+                    enabled = state.hasDraftItems && !state.isSubmitting && !state.isLoading && !state.isReadOnlyMode,
+                    loading = state.isSubmitting,
+                    fullWidth = true,
+                    leadingIcon = { Icon(Icons.Filled.ReceiptLong, contentDescription = null) }
                 )
             }
-
-            Divider()
-
-            StatLine(label = "العملاء", value = totalCustomers.toString())
-            StatLine(label = "المنتجات", value = totalProducts.toString())
-            StatLine(label = "الفواتير", value = totalSales.toString())
+            AppButton(
+                text = if (state.isReadOnlyMode) "وضع القراءة فقط" else "إرسال عملية البيع",
+                onClick = { onEvent(SalesUiEvent.SubmitSale) },
+                variant = AppButtonVariant.Primary,
+                size = AppButtonSize.Large,
+                enabled = state.canSubmit && !state.isReadOnlyMode,
+                loading = state.isSubmitting,
+                fullWidth = true,
+                leadingIcon = { Icon(Icons.Filled.Payment, contentDescription = null) }
+            )
         }
     }
 }
 
 @Composable
-private fun SalesSummaryCard(
-    subtotal: BigDecimal,
-    tax: BigDecimal,
-    discount: BigDecimal,
-    total: BigDecimal,
-    paid: BigDecimal,
-    remaining: BigDecimal,
-    change: BigDecimal,
-    itemCount: Int,
-    totalQuantity: BigDecimal,
-    currencyFormatter: (BigDecimal) -> String
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(AppDimens.Layout.screenPadding),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-        ) {
-            Text("ملخص الفاتورة", style = AppTypography.titleMedium)
-
-            StatLine(label = "عدد الأصناف", value = itemCount.toString())
-            StatLine(label = "الكمية", value = totalQuantity.stripTrailingZeros().toPlainString())
-            StatLine(label = "المدفوع", value = currencyFormatter(paid))
-
-            Divider()
-
-            SummaryRow(label = "الإجمالي الفرعي", value = currencyFormatter(subtotal))
-            SummaryRow(label = "الضريبة", value = currencyFormatter(tax))
-            SummaryRow(label = "الخصم", value = currencyFormatter(discount))
-            SummaryRow(label = "الإجمالي النهائي", value = currencyFormatter(total), emphasized = true)
-            SummaryRow(label = "المتبقي", value = currencyFormatter(remaining))
-            SummaryRow(label = "الباقي", value = currencyFormatter(change))
-        }
-    }
-}
-
-@Composable
-private fun SalesDraftFormCard(
+private fun SalesHeroCard(
     state: SalesUiState,
-    currencyFormatter: (BigDecimal) -> String,
-    onEvent: (SalesUiEvent) -> Unit,
-    invoiceTouched: Boolean,
-    onInvoiceTouched: () -> Unit
+    customerName: String,
+    paymentMethodName: String
 ) {
-    val draftError = state.validationErrors["draftItems"]
-    val invoiceError = state.validationErrors["invoiceNumber"]
-    val paymentError = state.validationErrors["paymentMethod"]
-    val creditError = state.validationErrors["credit"]
+    val heroBrush = remember {
+        Brush.horizontalGradient(
+            colors = listOf(
+                BrandPrimary,
+                BrandPrimaryDark
+            )
+        )
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(AppDimens.Radius.large),
+        colors = CardDefaults.cardColors(containerColor = SurfaceColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.high)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(heroBrush)
+                    .padding(AppDimens.Layout.screenPadding)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)) {
+                    Text(
+                        text = "التحكم الذكي في المبيعات",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "إدارة المسودة والملخصات والمنتجات مع واجهة خضراء متوازنة واحترافية.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.92f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        StatusChip(
+                            text = if (state.isSubmitting) "جارٍ التنفيذ" else "جاهز",
+                            containerColor = Color.White.copy(alpha = 0.16f),
+                            contentColor = Color.White,
+                            icon = Icons.Filled.Done
+                        )
+                        if (state.canAccessCreditSales) {
+                            StatusChip(
+                                text = "بيع آجل متاح",
+                                containerColor = Color.White.copy(alpha = 0.16f),
+                                contentColor = Color.White,
+                                icon = Icons.Filled.AttachMoney
+                            )
+                        }
+                        if (state.canAccessReturns) {
+                            StatusChip(
+                                text = "مرتجعات مفعلة",
+                                containerColor = Color.White.copy(alpha = 0.16f),
+                                contentColor = Color.White,
+                                icon = Icons.Filled.Refresh
+                            )
+                        }
+                    }
+                }
+            }
+
+            Column(
+                modifier = Modifier.padding(AppDimens.Layout.screenPadding),
+                verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
+                ) {
+                    MiniStatCard(
+                        title = "الإجمالي",
+                        value = formatMoney(state.totalAmount, state.currencyCode),
+                        icon = Icons.Filled.AttachMoney,
+                        accent = BrandPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MiniStatCard(
+                        title = "عدد الأصناف",
+                        value = state.itemCount.toString(),
+                        icon = Icons.Filled.ShoppingCart,
+                        accent = BrandPrimaryDark,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MiniStatCard(
+                        title = "المدفوع",
+                        value = formatMoney(state.paidAmount, state.currencyCode),
+                        icon = Icons.Filled.Payment,
+                        accent = InfoColor,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
+                ) {
+                    DetailChip(
+                        label = "العميل",
+                        value = customerName.ifBlank { "غير محدد" },
+                        modifier = Modifier.weight(1f)
+                    )
+                    DetailChip(
+                        label = "طريقة الدفع",
+                        value = paymentMethodName.ifBlank { "غير محددة" },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailsPanel(
+    state: SalesUiState,
+    onEvent: (SalesUiEvent) -> Unit,
+    customerName: String,
+    paymentMethodName: String
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(AppDimens.Radius.large),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.low)
     ) {
         Column(
-            modifier = Modifier.padding(AppDimens.Layout.screenPadding),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Layout.screenPadding),
             verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
         ) {
-            Text("بيانات الفاتورة", style = AppTypography.titleMedium)
+            DetailChip(
+                label = "العميل المحدد",
+                value = customerName.ifBlank { "لم يتم الاختيار بعد" },
+                accent = BrandPrimary,
+                trailingLabel = if (state.selectedCustomer != null) "محدد" else "فارغ"
+            )
+            DetailChip(
+                label = "طريقة الدفع",
+                value = paymentMethodName.ifBlank { "لم يتم الاختيار بعد" },
+                accent = BrandPrimaryDark,
+                trailingLabel = if (state.selectedPaymentMethod != null) "محددة" else "فارغة"
+            )
 
             AppTextField(
                 value = state.invoiceNumber,
-                onValueChange = {
-                    onInvoiceTouched()
-                    onEvent(SalesUiEvent.UpdateInvoiceNumber(it))
-                },
+                onValueChange = { onEvent(SalesUiEvent.UpdateInvoiceNumber(it)) },
                 label = "رقم الفاتورة",
-                placeholder = "أدخل الرقم المرجعي",
-                errorText = invoiceError,
-                helperText = if (invoiceTouched || state.invoiceNumber.isNotBlank()) null else "أدخل رقمًا واضحًا",
-                size = AppTextFieldSize.Medium,
-                contentDescription = "رقم الفاتورة"
+                placeholder = "اتركه فارغًا إن كان سيُولد تلقائيًا",
+                leadingIcon = { Icon(Icons.Filled.ReceiptLong, contentDescription = null) },
+                enabled = !state.isReadOnlyMode,
+                variant = AppTextFieldVariant.Outlined,
+                size = AppTextFieldSize.Medium
             )
 
             AppTextField(
                 value = state.note,
                 onValueChange = { onEvent(SalesUiEvent.UpdateNote(it)) },
                 label = "ملاحظات",
-                placeholder = "ملاحظات داخلية",
+                placeholder = "أي ملاحظة إضافية مرتبطة بعملية البيع",
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                enabled = !state.isReadOnlyMode,
                 singleLine = false,
-                minLines = 2,
-                maxLines = 4,
-                size = AppTextFieldSize.Large,
-                contentDescription = "ملاحظات الفاتورة"
+                minLines = 3,
+                maxLines = 5,
+                variant = AppTextFieldVariant.Outlined,
+                size = AppTextFieldSize.Large
             )
 
             AppTextField(
-                value = currencyFormatter(state.paidAmount),
+                value = state.paidAmount.stripForInput(),
                 onValueChange = { onEvent(SalesUiEvent.UpdatePaidAmount(it)) },
                 label = "المبلغ المدفوع",
                 placeholder = "0.00",
-                helperText = "يمكن إدخال الرقم مباشرة",
-                size = AppTextFieldSize.Medium,
-                contentDescription = "المبلغ المدفوع"
+                leadingIcon = { Icon(Icons.Filled.AttachMoney, contentDescription = null) },
+                enabled = !state.isReadOnlyMode,
+                variant = AppTextFieldVariant.Outlined,
+                size = AppTextFieldSize.Medium
             )
 
-            if (!draftError.isNullOrBlank() || !paymentError.isNullOrBlank() || !creditError.isNullOrBlank()) {
-                Column(verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.extraSmall)) {
-                    listOfNotNull(draftError, paymentError, creditError).forEach { message ->
-                        Text(
-                            text = "• $message",
-                            style = AppTypography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
+            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
 
-@Composable
-private fun SalesCustomerAndPaymentCard(
-    state: SalesUiState,
-    currencyFormatter: (BigDecimal) -> String
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(AppDimens.Layout.screenPadding),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-        ) {
-            Text("العميل والدفع", style = AppTypography.titleMedium)
-
-            SummaryField(
-                label = "العميل المختار",
-                value = state.customerName.ifBlank { "لم يتم اختيار عميل" },
-                trailing = if (state.canUseCredit) "يسمح بالآجل" else "نقدي"
-            )
-
-            SummaryField(
-                label = "طريقة الدفع",
-                value = state.paymentMethodName.ifBlank { "غير محددة" },
-                trailing = if (state.selectedPaymentMethod == null) "اختر طريقة الدفع" else "جاهزة"
-            )
-
-            SummaryField(
-                label = "الرصيد المتبقي",
-                value = currencyFormatter(state.remainingAmount),
-                trailing = when {
-                    state.remainingAmount > BigDecimal.ZERO && state.canUseCredit -> "آجل متاح"
-                    state.remainingAmount > BigDecimal.ZERO -> "لا يسمح بالآجل"
-                    else -> "مكتمل"
-                }
-            )
-        }
-    }
-}
-
-@Composable
-private fun SalesDraftItemsCard(
-    items: List<SaleItem>,
-    currencyFormatter: (BigDecimal) -> String,
-    onIncrement: (SaleItem) -> Unit,
-    onDecrement: (SaleItem) -> Unit,
-    onRemove: (SaleItem) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(AppDimens.Layout.screenPadding),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-        ) {
-            Text("الأصناف المختارة", style = AppTypography.titleMedium)
-
-            if (items.isEmpty()) {
-                Text(
-                    text = "لم تتم إضافة أي صنف بعد.",
-                    style = AppTypography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
+            ) {
+                SummaryTile(
+                    title = "المتبقي",
+                    value = formatMoney(state.remainingAmount, state.currencyCode),
+                    modifier = Modifier.weight(1f),
+                    accent = ErrorColor
                 )
-            } else {
-                items.forEach { item ->
-                    DraftItemRow(
-                        item = item,
-                        currencyFormatter = currencyFormatter,
-                        onIncrement = { onIncrement(item) },
-                        onDecrement = { onDecrement(item) },
-                        onRemove = { onRemove(item) }
-                    )
-                }
+                SummaryTile(
+                    title = "الباقي",
+                    value = formatMoney(state.changeAmount, state.currencyCode),
+                    modifier = Modifier.weight(1f),
+                    accent = BrandPrimaryDark
+                )
             }
         }
     }
 }
 
 @Composable
-private fun DraftItemRow(
+private fun TotalsCard(
+    state: SalesUiState,
+    currencyCode: String
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(AppDimens.Radius.large),
+        colors = CardDefaults.cardColors(containerColor = BrandPrimarySoft),
+        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.low),
+        border = BorderStroke(1.dp, BrandPrimary.copy(alpha = 0.20f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Layout.screenPadding),
+            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
+        ) {
+            Text(
+                text = "الملخص المالي",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimaryColor
+            )
+            MoneyRow("الإجمالي الفرعي", formatMoney(state.subtotalAmount, currencyCode), BrandPrimaryDark)
+            MoneyRow("الضريبة", formatMoney(state.taxAmount, currencyCode), BrandPrimaryDark)
+            MoneyRow("الخصم", formatMoney(state.discountAmount, currencyCode), ErrorColor)
+            Divider(color = BrandPrimary.copy(alpha = 0.18f))
+            MoneyRow(
+                label = "الإجمالي النهائي",
+                amount = formatMoney(state.totalAmount, currencyCode),
+                accent = BrandPrimary
+            )
+        }
+    }
+}
+
+@Composable
+private fun DraftItemCard(
     item: SaleItem,
-    currencyFormatter: (BigDecimal) -> String,
-    onIncrement: () -> Unit,
-    onDecrement: () -> Unit,
+    currencyCode: String,
+    enabled: Boolean,
+    onIncrease: () -> Unit,
+    onDecrease: () -> Unit,
     onRemove: () -> Unit
 ) {
-    val lineTotal = item.calculateSubtotal().money()
-
-    Surface(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+        shape = RoundedCornerShape(AppDimens.Radius.large),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.low),
+        border = BorderStroke(1.dp, BrandPrimary.copy(alpha = 0.16f))
     ) {
         Column(
-            modifier = Modifier.padding(AppDimens.Spacing.medium),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Layout.screenPadding),
             verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
             ) {
-                Column(modifier = Modifier.fillMaxWidth(0.85f)) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = item.productName,
-                        style = AppTypography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
+                        text = item.productName.ifBlank { "صنف غير مسمى" },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimaryColor,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = listOfNotNull(
-                            item.productId.takeIf { it.isNotBlank() },
-                            item.unit?.toString(),
-                            if (item.isReturn) "مرتجع" else null
-                        ).joinToString(" • ").ifBlank { "عنصر فاتورة" },
-                        style = AppTypography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = "الباركود/المرجع: ${item.productId}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondaryColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+                AppButton(
+                    text = "",
+                    onClick = onRemove,
+                    variant = AppButtonVariant.Text,
+                    size = AppButtonSize.Small,
+                    enabled = enabled,
+                    leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = ErrorColor) }
+                )
+            }
 
-                IconButton(onClick = onRemove) {
-                    Icon(
-                        imageVector = Icons.Filled.DeleteOutline,
-                        contentDescription = "حذف الصنف"
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CounterButton(
+                    text = "−",
+                    onClick = onDecrease,
+                    enabled = enabled
+                )
+                CounterButton(
+                    text = item.quantity.stripTrailingZeros().toPlainString(),
+                    onClick = { },
+                    enabled = false,
+                    emphasized = true
+                )
+                CounterButton(
+                    text = "+",
+                    onClick = onIncrease,
+                    enabled = enabled
+                )
+
+                Spacer(modifier = Modifier.width(AppDimens.Spacing.small))
+
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    MoneyRow(
+                        label = "سعر الوحدة",
+                        amount = formatMoney(item.unitPrice, currencyCode),
+                        accent = BrandPrimaryDark,
+                        compact = true
+                    )
+                    MoneyRow(
+                        label = "الإجمالي",
+                        amount = formatMoney(item.calculateSubtotal(), currencyCode),
+                        accent = BrandPrimary,
+                        compact = true
                     )
                 }
             }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
             ) {
-                Text(
-                    text = "${item.quantity.stripTrailingZeros().toPlainString()} × ${currencyFormatter(item.unitPrice)}",
-                    style = AppTypography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                StatusChip(
+                    text = "الكمية: ${item.quantity.stripTrailingZeros().toPlainString()}",
+                    containerColor = BrandPrimarySoft,
+                    contentColor = BrandPrimaryDark,
+                    icon = Icons.Filled.ShoppingCart
                 )
-                Text(
-                    text = currencyFormatter(lineTotal),
-                    style = AppTypography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)) {
-                AppButton(
-                    text = "-",
-                    onClick = onDecrement,
-                    variant = AppButtonVariant.Outlined,
-                    size = AppButtonSize.Small
-                )
-                AppButton(
-                    text = "+",
-                    onClick = onIncrement,
-                    variant = AppButtonVariant.Primary,
-                    size = AppButtonSize.Small
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SalesProductsCard(
-    products: List<Product>,
-    currencyFormatter: (BigDecimal) -> String,
-    onAdd: (Product) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(AppDimens.Layout.screenPadding),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-        ) {
-            Text("المنتجات المتاحة", style = AppTypography.titleMedium)
-
-            if (products.isEmpty()) {
-                Text(
-                    text = "لا توجد منتجات متاحة حالياً.",
-                    style = AppTypography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                products.take(8).forEach { product ->
-                    ProductRow(
-                        product = product,
-                        currencyFormatter = currencyFormatter,
-                        onAdd = { onAdd(product) }
+                item.unit?.toString()?.takeIf { it.isNotBlank() }?.let { unit ->
+                    StatusChip(
+                        text = unit,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = TextSecondaryColor,
+                        icon = Icons.Filled.Inventory2
                     )
                 }
             }
@@ -728,304 +789,138 @@ private fun SalesProductsCard(
 
 @Composable
 private fun ProductRow(
-    product: Product,
-    currencyFormatter: (BigDecimal) -> String,
-    onAdd: () -> Unit
+    products: List<Product>,
+    enabled: Boolean,
+    onProductClick: (Product) -> Unit
 ) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onAdd),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-    ) {
-        Row(
-            modifier = Modifier.padding(AppDimens.Spacing.medium),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.fillMaxWidth(0.75f)) {
-                Text(
-                    text = product.effectiveName,
-                    style = AppTypography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = listOfNotNull(
-                        product.normalizedBarcode.takeIf { it.isNotBlank() },
-                        product.unitOfMeasure?.toString()
-                    ).joinToString(" • "),
-                    style = AppTypography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = currencyFormatter(product.price.money()),
-                    style = AppTypography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "إضافة",
-                    style = AppTypography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SalesCustomersCard(
-    customers: List<Customer>,
-    selectedCustomer: Customer?,
-    onSelect: (Customer) -> Unit
-) {
-    Card(
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
     ) {
-        Column(
-            modifier = Modifier.padding(AppDimens.Layout.screenPadding),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-        ) {
-            Text("العملاء", style = AppTypography.titleMedium)
-
-            if (customers.isEmpty()) {
-                Text(
-                    text = "لا توجد نتائج عملاء.",
-                    style = AppTypography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        products.forEachIndexed { index, product ->
+            Box(modifier = Modifier.weight(1f)) {
+                ProductCard(
+                    product = product,
+                    actionText = if (enabled) "بيع الآن" else "عرض",
+                    onActionClick = { if (enabled) onProductClick(product) },
+                    onCardClick = { if (enabled) onProductClick(product) }
                 )
-            } else {
-                customers.take(8).forEach { customer ->
-                    CustomerRow(
-                        customer = customer,
-                        selected = selectedCustomer?.id == customer.id,
-                        onSelect = { onSelect(customer) }
-                    )
-                }
+            }
+            if (index == 0 && products.size == 1) {
+                Spacer(modifier = Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
-private fun CustomerRow(
-    customer: Customer,
-    selected: Boolean,
-    onSelect: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onSelect),
-        shape = MaterialTheme.shapes.medium,
-        color = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-        }
-    ) {
-        Column(
-            modifier = Modifier.padding(AppDimens.Spacing.medium),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = customer.displayName,
-                style = AppTypography.titleSmall,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            if (!customer.taxNumber.isNullOrBlank()) {
-                Text(
-                    text = "الرقم الضريبي: ${customer.taxNumber}",
-                    style = AppTypography.bodySmall,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SalesHistoryCard(
-    sales: List<Sale>,
-    selectedSale: Sale?,
-    currencyFormatter: (BigDecimal) -> String,
-    onSelect: (Sale) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(AppDimens.Layout.screenPadding),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-        ) {
-            Text("الفواتير السابقة", style = AppTypography.titleMedium)
-
-            if (sales.isEmpty()) {
-                Text(
-                    text = "لا توجد فواتير محفوظة بعد.",
-                    style = AppTypography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                sales.take(6).forEach { sale ->
-                    SaleRow(
-                        sale = sale,
-                        selected = selectedSale?.id == sale.id,
-                        currencyFormatter = currencyFormatter,
-                        onSelect = { onSelect(sale) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SaleRow(
+private fun RecentSaleCard(
     sale: Sale,
-    selected: Boolean,
-    currencyFormatter: (BigDecimal) -> String,
-    onSelect: () -> Unit
+    currencyCode: String,
+    onClick: () -> Unit
 ) {
-    Surface(
+    val total = sale.items.sumItemsTotal()
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onSelect),
-        shape = MaterialTheme.shapes.medium,
-        color = if (selected) {
-            MaterialTheme.colorScheme.secondaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-        }
+            .padding(vertical = 1.dp),
+        shape = RoundedCornerShape(AppDimens.Radius.large),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.low),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.10f))
     ) {
         Column(
-            modifier = Modifier.padding(AppDimens.Spacing.medium),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Layout.screenPadding)
         ) {
-            Text(
-                text = sale.invoiceNumber.ifBlank { "فاتورة بدون رقم" },
-                style = AppTypography.titleSmall,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.onSecondaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = "عدد الأصناف: ${sale.items.size}",
-                style = AppTypography.bodySmall,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.onSecondaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = sale.invoiceNumber.ifBlank { "فاتورة غير مرقمة" },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimaryColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = sale.id,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondaryColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-            )
-            Text(
-                text = "المدفوع: ${currencyFormatter(sale.paidAmount.money())}",
-                style = AppTypography.bodySmall,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.onSecondaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
-            )
-            if (!sale.note.isNullOrBlank()) {
-                Text(
-                    text = sale.note,
-                    style = AppTypography.bodySmall,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.onSecondaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                StatusChip(
+                    text = sale.saleStatus.name,
+                    containerColor = BrandPrimarySoft,
+                    contentColor = BrandPrimaryDark,
+                    icon = Icons.Filled.Done
                 )
             }
-        }
-    }
-}
 
-@Composable
-private fun SalesActionsCard(
-    state: SalesUiState,
-    onEvent: (SalesUiEvent) -> Unit,
-    onNavigateBack: (() -> Unit)?
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(AppDimens.Layout.screenPadding),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-        ) {
-            Text("الإجراءات", style = AppTypography.titleMedium)
+            Spacer(modifier = Modifier.height(AppDimens.Spacing.small))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
             ) {
-                AppButton(
-                    text = "مسح النموذج",
-                    onClick = { onEvent(SalesUiEvent.ResetForm) },
-                    variant = AppButtonVariant.Outlined,
-                    size = AppButtonSize.Medium
+                SummaryTile(
+                    title = "عدد الأصناف",
+                    value = sale.items.size.toString(),
+                    modifier = Modifier.weight(1f),
+                    accent = BrandPrimaryDark
                 )
-                AppButton(
-                    text = "حفظ كمسودة",
-                    onClick = { onEvent(SalesUiEvent.SaveDraft) },
-                    variant = AppButtonVariant.Secondary,
-                    size = AppButtonSize.Medium
+                SummaryTile(
+                    title = "الإجمالي",
+                    value = formatMoney(total, currencyCode),
+                    modifier = Modifier.weight(1f),
+                    accent = BrandPrimary
                 )
             }
 
-            AppButton(
-                text = if (state.isSubmitting) "جاري الحفظ..." else "إتمام البيع",
-                onClick = { onEvent(SalesUiEvent.SubmitSale) },
-                variant = AppButtonVariant.Primary,
-                size = AppButtonSize.Large,
-                enabled = state.canSubmit,
-                loading = state.isSubmitting,
-                fullWidth = true
-            )
+            Spacer(modifier = Modifier.height(AppDimens.Spacing.small))
 
-            if (onNavigateBack != null) {
-                AppButton(
-                    text = "الرجوع",
-                    onClick = onNavigateBack,
-                    variant = AppButtonVariant.Text,
-                    size = AppButtonSize.Medium,
-                    fullWidth = true
+            AppButton(
+                text = "عرض التفاصيل",
+                onClick = onClick,
+                variant = AppButtonVariant.Outlined,
+                size = AppButtonSize.Small,
+                fullWidth = true,
+                leadingIcon = { Icon(Icons.Filled.ReceiptLong, contentDescription = null) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ValidationBanner(errors: List<String>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(AppDimens.Radius.large),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7F7)),
+        border = BorderStroke(1.dp, ErrorColor.copy(alpha = 0.20f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Layout.screenPadding),
+            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
+        ) {
+            Text(
+                text = "ملاحظات التحقق",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimaryColor
+            )
+            errors.filter { it.isNotBlank() }.take(4).forEach { error ->
+                Text(
+                    text = "• $error",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondaryColor
                 )
             }
         }
@@ -1033,10 +928,258 @@ private fun SalesActionsCard(
 }
 
 @Composable
-private fun SummaryRow(
+private fun EmptyCard(
+    title: String,
+    message: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(AppDimens.Radius.large),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Layout.screenPadding),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(AppDimens.Radius.round))
+                    .background(BrandPrimarySoft),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = BrandPrimaryDark)
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimaryColor
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondaryColor,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    accent: Color
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(AppDimens.Radius.medium))
+                .background(accent.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = accent)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimaryColor
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondaryColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusChip(
+    text: String,
+    containerColor: Color,
+    contentColor: Color,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    Surface(
+        color = containerColor,
+        contentColor = contentColor,
+        shape = RoundedCornerShape(AppDimens.Radius.round)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                color = contentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun DetailChip(
     label: String,
     value: String,
-    emphasized: Boolean = false
+    modifier: Modifier = Modifier,
+    accent: Color = BrandPrimary,
+    trailingLabel: String? = null
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(AppDimens.Radius.medium),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextSecondaryColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!trailingLabel.isNullOrBlank()) {
+                    StatusChip(
+                        text = trailingLabel,
+                        containerColor = accent.copy(alpha = 0.12f),
+                        contentColor = accent,
+                        icon = Icons.Filled.Done
+                    )
+                }
+            }
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleSmall,
+                color = TextPrimaryColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun MiniStatCard(
+    title: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(AppDimens.Radius.medium),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.16f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(AppDimens.Radius.small))
+                    .background(accent.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                color = TextSecondaryColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimaryColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun SummaryTile(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    accent: Color = BrandPrimary
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(AppDimens.Radius.medium),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                color = TextSecondaryColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleSmall,
+                color = accent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun MoneyRow(
+    label: String,
+    amount: String,
+    accent: Color,
+    compact: Boolean = false
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1045,13 +1188,15 @@ private fun SummaryRow(
     ) {
         Text(
             text = label,
-            style = if (emphasized) AppTypography.titleSmall else AppTypography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+            color = TextSecondaryColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         Text(
-            text = value,
-            style = if (emphasized) AppTypography.titleSmall else AppTypography.bodyMedium,
-            color = if (emphasized) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            text = amount,
+            style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.titleSmall,
+            color = accent,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -1059,69 +1204,39 @@ private fun SummaryRow(
 }
 
 @Composable
-private fun StatLine(
-    label: String,
-    value: String
+private fun CounterButton(
+    text: String,
+    onClick: () -> Unit,
+    enabled: Boolean,
+    emphasized: Boolean = false
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(AppDimens.Radius.medium),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-    ) {
-        Row(
-            modifier = Modifier.padding(AppDimens.Spacing.medium),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = label,
-                style = AppTypography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = value,
-                style = AppTypography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
+    val background = when {
+        !enabled -> MaterialTheme.colorScheme.surfaceVariant
+        emphasized -> BrandPrimarySoft
+        else -> MaterialTheme.colorScheme.surface
     }
-}
+    val contentColor = when {
+        !enabled -> TextSecondaryColor.copy(alpha = 0.6f)
+        emphasized -> BrandPrimaryDark
+        else -> TextPrimaryColor
+    }
 
-@Composable
-private fun SummaryField(
-    label: String,
-    value: String,
-    trailing: String
-) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+        onClick = onClick,
+        enabled = enabled,
+        color = background,
+        contentColor = contentColor,
+        shape = RoundedCornerShape(AppDimens.Radius.medium),
+        border = BorderStroke(1.dp, BrandPrimary.copy(alpha = 0.18f))
     ) {
-        Row(
-            modifier = Modifier.padding(AppDimens.Spacing.medium),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier.size(width = 44.dp, height = 40.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Column(modifier = Modifier.fillMaxWidth(0.75f)) {
-                Text(
-                    text = label,
-                    style = AppTypography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = value,
-                    style = AppTypography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
             Text(
-                text = trailing,
-                style = AppTypography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
+                text = text,
+                style = MaterialTheme.typography.titleMedium,
+                color = contentColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1129,21 +1244,84 @@ private fun SummaryField(
     }
 }
 
-private fun createCurrencyFormatter(currencyCode: String): (BigDecimal) -> String {
-    val code = currencyCode.uppercase()
-    val locale = when (code) {
-        "SDG", "SAR", "AED", "EGP", "QAR", "KWD", "BHD", "OMR" -> Locale("ar", "SA")
-        else -> Locale.getDefault()
-    }
-
-    val formatter = NumberFormat.getNumberInstance(locale).apply {
-        minimumFractionDigits = 2
-        maximumFractionDigits = 2
-    }
-
-    return { amount: BigDecimal ->
-        "${formatter.format(amount.money())} $code"
+private fun buildSalesSubtitle(state: SalesUiState): String {
+    return when {
+        state.isSubmitting -> "جارٍ الحفظ والإرسال"
+        state.isRefreshing -> "جارٍ تحديث البيانات"
+        state.hasDraftItems -> "${state.itemCount} صنف في المسودة"
+        else -> "إدارة البيع والحفظ والملخصات من مكان واحد"
     }
 }
 
-private fun BigDecimal.money(): BigDecimal = setScale(2, RoundingMode.HALF_UP)
+private fun validationDetails(errors: Map<String, String>): String? {
+    val combined = errors.values.filter { it.isNotBlank() }.joinToString(separator = "")
+    return combined.ifBlank { null }
+}
+
+private fun saleItemKey(item: SaleItem): String {
+    return item.id.ifBlank { item.productId }
+}
+
+private fun formatMoney(amount: BigDecimal, currencyCode: String): String {
+    val normalized = amount.setScale(2, RoundingMode.HALF_UP)
+    return "$currencyCode ${normalized.toPlainString()}"
+}
+
+private fun BigDecimal.stripForInput(): String {
+    return setScale(2, RoundingMode.HALF_UP).toPlainString()
+}
+
+private fun Product.filterableText(): String {
+    return buildString {
+        append(filterValue(readText("effectiveName", "displayName", "name", "title")))
+        append(' ')
+        append(filterValue(readText("barcode", "id", "productId")))
+        append(' ')
+        append(filterValue(readText("categoryName", "category", "groupName")))
+        append(' ')
+        append(filterValue(readText("description", "notes")))
+    }
+}
+
+private fun Sale.filterableText(): String {
+    return buildString {
+        append(filterValue(readText("invoiceNumber")))
+        append(' ')
+        append(filterValue(readText("id")))
+        append(' ')
+        append(filterValue(readText("customerId")))
+        append(' ')
+        append(filterValue(readText("employeeId")))
+        append(' ')
+        append(filterValue(readText("saleStatus")))
+    }
+}
+
+
+private fun List<SaleItem>.sumItemsTotal(): BigDecimal {
+    return fold(BigDecimal.ZERO) { acc, item ->
+        acc.add(item.calculateSubtotal())
+    }.setScale(2, RoundingMode.HALF_UP)
+}
+
+private fun readValueFrom(instance: Any, vararg names: String): Any? {
+    val clazz = instance.javaClass
+    names.forEach { name ->
+        val getter = clazz.methods.firstOrNull { method ->
+            method.parameterCount == 0 &&
+                (method.name == name || method.name == "get${name.replaceFirstChar { it.uppercase() }}")
+        }
+        if (getter != null) {
+            return runCatching { getter.invoke(instance) }.getOrNull()
+        }
+    }
+    return null
+}
+
+private fun Any.readText(vararg names: String): String {
+    return readValueFrom(this, *names)?.toString().orEmpty()
+}
+
+private fun filterValue(value: String?): String {
+    return value.orEmpty().trim().lowercase(Locale.getDefault())
+}

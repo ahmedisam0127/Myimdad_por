@@ -1,7 +1,5 @@
 package com.myimdad_por.domain.model
 
-import kotlin.math.abs
-
 enum class UnitOfMeasure(
     val displayName: String,
     val symbol: String,
@@ -282,6 +280,15 @@ enum class UnitOfMeasure(
         order = 17,
         isDecimalAllowed = true,
         aliases = setOf("وحدة", "unit")
+    ),
+
+    DEFAULT(
+        displayName = "وحدة",
+        symbol = "وحدة",
+        category = Category.SMALL,
+        dimension = Dimension.COUNT,
+        order = 99,
+        isDecimalAllowed = true
     );
 
     enum class Category {
@@ -298,10 +305,14 @@ enum class UnitOfMeasure(
 
     companion object {
         val largeUnits: List<UnitOfMeasure> =
-            values().filter { it.category == Category.LARGE }.sortedBy { it.order }
+            values()
+                .filter { it.category == Category.LARGE && it != DEFAULT }
+                .sortedBy { it.order }
 
         val smallUnits: List<UnitOfMeasure> =
-            values().filter { it.category == Category.SMALL }.sortedBy { it.order }
+            values()
+                .filter { it.category == Category.SMALL && it != DEFAULT }
+                .sortedBy { it.order }
 
         fun fromName(name: String): UnitOfMeasure {
             val normalized = name.trim()

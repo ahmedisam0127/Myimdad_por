@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import java.math.BigDecimal
-import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
@@ -42,14 +41,13 @@ class DashboardViewModel @Inject constructor(
             DashboardUiEvent.Refresh -> refreshDashboard()
             DashboardUiEvent.Retry -> loadDashboard(forceRefresh = true)
             is DashboardUiEvent.ChangePeriod -> changePeriod(event.period)
-
+            DashboardUiEvent.NavigateToSales -> Unit
+            DashboardUiEvent.NavigateToExpenses -> Unit
+            DashboardUiEvent.NavigateToReports -> Unit
             is DashboardUiEvent.OnSaleClick -> Unit
             is DashboardUiEvent.OnExpenseClick -> Unit
             is DashboardUiEvent.OnReportClick -> Unit
             is DashboardUiEvent.OnTransactionClick -> Unit
-            DashboardUiEvent.NavigateToSales -> Unit
-            DashboardUiEvent.NavigateToExpenses -> Unit
-            DashboardUiEvent.NavigateToReports -> Unit
         }
     }
 
@@ -114,34 +112,33 @@ class DashboardViewModel @Inject constructor(
         val security = resolveSecuritySnapshot()
 
         updateDashboardState { current ->
-            val base = current.copy()
-
-            base.copy(
+            current.copy(
                 isLoading = false,
                 isRefreshing = false,
                 errorMessage = null,
-                selectedPeriod = if (preserveSelection) base.selectedPeriod else DashboardPeriod.Today,
+                selectedPeriod = if (preserveSelection) current.selectedPeriod else DashboardPeriod.Today,
+
                 currencyCode = snapshot.currencyCode
                     ?: analytics?.summary?.currencyCode
-                    ?: base.currencyCode,
+                    ?: current.currencyCode,
 
-                salesCount = snapshot.salesCount ?: base.salesCount,
-                expensesCount = snapshot.expensesCount ?: base.expensesCount,
-                reportsCount = snapshot.reportsCount ?: base.reportsCount,
-                paymentTransactionsCount = snapshot.paymentTransactionsCount ?: base.paymentTransactionsCount,
-                pendingPaymentsCount = snapshot.pendingPaymentsCount ?: base.pendingPaymentsCount,
-                paidPaymentsCount = snapshot.paidPaymentsCount ?: base.paidPaymentsCount,
+                salesCount = snapshot.salesCount ?: current.salesCount,
+                expensesCount = snapshot.expensesCount ?: current.expensesCount,
+                reportsCount = snapshot.reportsCount ?: current.reportsCount,
+                paymentTransactionsCount = snapshot.paymentTransactionsCount ?: current.paymentTransactionsCount,
+                pendingPaymentsCount = snapshot.pendingPaymentsCount ?: current.pendingPaymentsCount,
+                paidPaymentsCount = snapshot.paidPaymentsCount ?: current.paidPaymentsCount,
 
-                totalSalesAmount = snapshot.totalSalesAmount ?: base.totalSalesAmount,
-                totalExpensesAmount = snapshot.totalExpensesAmount ?: base.totalExpensesAmount,
-                netAmount = snapshot.netAmount ?: base.netAmount,
-                totalPaidAmount = snapshot.totalPaidAmount ?: base.totalPaidAmount,
-                totalPendingAmount = snapshot.totalPendingAmount ?: base.totalPendingAmount,
+                totalSalesAmount = snapshot.totalSalesAmount ?: current.totalSalesAmount,
+                totalExpensesAmount = snapshot.totalExpensesAmount ?: current.totalExpensesAmount,
+                netAmount = snapshot.netAmount ?: current.netAmount,
+                totalPaidAmount = snapshot.totalPaidAmount ?: current.totalPaidAmount,
+                totalPendingAmount = snapshot.totalPendingAmount ?: current.totalPendingAmount,
 
-                recentSales = snapshot.recentSales.ifNotEmptyElse(base.recentSales),
-                recentExpenses = snapshot.recentExpenses.ifNotEmptyElse(base.recentExpenses),
-                recentReports = snapshot.recentReports.ifNotEmptyElse(base.recentReports),
-                recentTransactions = snapshot.recentTransactions.ifNotEmptyElse(base.recentTransactions),
+                recentSales = snapshot.recentSales.ifNotEmptyElse(current.recentSales),
+                recentExpenses = snapshot.recentExpenses.ifNotEmptyElse(current.recentExpenses),
+                recentReports = snapshot.recentReports.ifNotEmptyElse(current.recentReports),
+                recentTransactions = snapshot.recentTransactions.ifNotEmptyElse(current.recentTransactions),
 
                 canAccessReports = snapshot.canAccessReports ?: security.canAccessReports,
                 canUsePaidFeatures = snapshot.canUsePaidFeatures ?: security.canUsePaidFeatures,
@@ -216,212 +213,34 @@ class DashboardViewModel @Inject constructor(
         )
     }
 
-    private fun currentDashboardState(): DashboardUiState {
-        return currentData ?: DashboardUiState()
-    }
-
     private fun updateDashboardState(transform: (DashboardUiState) -> DashboardUiState) {
         val current = currentData ?: DashboardUiState()
         setSuccess(transform(current))
     }
 
     private fun Dashboard.extractSnapshot(): DashboardSnapshot {
-        val root: Any = this
-
-        val recentSales = root.typedList<Sale>("recentSales", "sales", "salesItems", "lastSales")
-        val recentExpenses = root.typedList<Expense>("recentExpenses", "expenses", "expenseItems", "lastExpenses")
-        val recentReports = root.typedList<Report>("recentReports", "reports", "reportItems", "lastReports")
-        val recentTransactions = root.typedList<PaymentTransaction>(
-            "recentTransactions",
-            "paymentTransactions",
-            "transactions",
-            "lastTransactions"
-        )
-
-        val salesNode = root.propertyValue("sales")
-        val expensesNode = root.propertyValue("expenses")
-        val reportsNode = root.propertyValue("reports")
-        val transactionsNode = root.propertyValue("paymentTransactions")
-            ?: root.propertyValue("transactions")
-            ?: root.propertyValue("payments")
-            ?: root.propertyValue("financialTransactions")
-
-        val analyticsSummary = runCatching { getAnalyticsData(this).summary }.getOrNull()
-
         return DashboardSnapshot(
-            currencyCode = root.stringProperty("currencyCode", "currency", "currencyIsoCode")
-                ?: analyticsSummary?.currencyCode,
-
-            salesCount = root.intProperty("salesCount", "totalSalesCount")
-                ?: recentSales.size.takeIf { it > 0 }
-                ?: salesNode?.intProperty("count", "totalCount", "itemsCount")
-                ?: salesNode?.listSize("items", "values"),
-
-            expensesCount = root.intProperty("expensesCount", "totalExpensesCount")
-                ?: recentExpenses.size.takeIf { it > 0 }
-                ?: expensesNode?.intProperty("count", "totalCount", "itemsCount")
-                ?: expensesNode?.listSize("items", "values"),
-
-            reportsCount = root.intProperty("reportsCount", "totalReportsCount")
-                ?: recentReports.size.takeIf { it > 0 }
-                ?: reportsNode?.intProperty("count", "totalCount", "itemsCount")
-                ?: reportsNode?.listSize("items", "values"),
-
-            paymentTransactionsCount = root.intProperty(
-                "paymentTransactionsCount",
-                "transactionsCount",
-                "totalTransactionsCount"
-            ) ?: recentTransactions.size.takeIf { it > 0 }
-                ?: transactionsNode?.intProperty("count", "totalCount", "itemsCount")
-                ?: transactionsNode?.listSize("items", "values"),
-
-            pendingPaymentsCount = root.intProperty("pendingPaymentsCount", "pendingCount")
-                ?: transactionsNode?.intProperty("pendingCount", "pendingPaymentsCount"),
-
-            paidPaymentsCount = root.intProperty("paidPaymentsCount", "paidCount")
-                ?: transactionsNode?.intProperty("paidCount", "paidPaymentsCount"),
-
-            totalSalesAmount = root.bigDecimalProperty(
-                "totalSalesAmount",
-                "salesAmount",
-                "salesTotalAmount",
-                "revenueAmount"
-            ) ?: salesNode?.bigDecimalProperty("totalAmount", "amount", "revenue"),
-
-            totalExpensesAmount = root.bigDecimalProperty(
-                "totalExpensesAmount",
-                "expensesAmount",
-                "expensesTotalAmount"
-            ) ?: expensesNode?.bigDecimalProperty("totalAmount", "amount"),
-
-            netAmount = root.bigDecimalProperty("netAmount", "balance", "netBalance")
-                ?: root.propertyValue("financial")?.bigDecimalProperty("netAmount", "balance", "netBalance"),
-
-            totalPaidAmount = root.bigDecimalProperty("totalPaidAmount", "paidAmount")
-                ?: transactionsNode?.bigDecimalProperty("paidAmount", "totalPaidAmount"),
-
-            totalPendingAmount = root.bigDecimalProperty("totalPendingAmount", "pendingAmount")
-                ?: transactionsNode?.bigDecimalProperty("pendingAmount", "totalPendingAmount"),
-
-            recentSales = recentSales,
-            recentExpenses = recentExpenses,
-            recentReports = recentReports,
-            recentTransactions = recentTransactions,
-
-            canAccessReports = root.booleanProperty("canAccessReports", "allowReports"),
-            canUsePaidFeatures = root.booleanProperty("canUsePaidFeatures", "allowPaidFeatures"),
-            isReadOnlyMode = root.booleanProperty("isReadOnlyMode", "readOnlyMode"),
-
-            lastUpdatedAtMillis = root.longProperty("lastUpdatedAtMillis", "lastUpdatedAtEpochMillis", "updatedAtMillis")
+            currencyCode = financial.currencyCode,
+            salesCount = sales.todaySalesCount,
+            expensesCount = 0,
+            reportsCount = 0,
+            paymentTransactionsCount = 0,
+            pendingPaymentsCount = sales.pendingInvoicesCount,
+            paidPaymentsCount = 0,
+            totalSalesAmount = sales.todayRevenue,
+            totalExpensesAmount = BigDecimal.ZERO,
+            netAmount = financial.netBalance,
+            totalPaidAmount = financial.totalCashIn,
+            totalPendingAmount = financial.payables,
+            recentSales = emptyList(),
+            recentExpenses = emptyList(),
+            recentReports = emptyList(),
+            recentTransactions = emptyList(),
+            canAccessReports = null,
+            canUsePaidFeatures = null,
+            isReadOnlyMode = null,
+            lastUpdatedAtMillis = lastUpdatedAtEpochMillis
         )
-    }
-
-    private fun Any?.propertyValue(name: String): Any? {
-        val receiver = this ?: return null
-
-        val methodNames = listOf(
-            name,
-            "get${name.capitalizeSafe()}",
-            "is${name.capitalizeSafe()}"
-        )
-
-        for (methodName in methodNames) {
-            val method = receiver.javaClass.methods.firstOrNull {
-                it.name == methodName && it.parameterCount == 0
-            }
-            if (method != null) {
-                return runCatching { method.invoke(receiver) }.getOrNull()
-            }
-        }
-
-        return runCatching {
-            receiver.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(receiver)
-        }.getOrNull()
-    }
-
-    private fun Any?.stringProperty(vararg names: String): String? {
-        for (name in names) {
-            when (val value = propertyValue(name)) {
-                is String -> if (value.isNotBlank()) return value
-                is Number, is Boolean -> return value.toString()
-            }
-        }
-        return null
-    }
-
-    private fun Any?.intProperty(vararg names: String): Int? {
-        for (name in names) {
-            when (val value = propertyValue(name)) {
-                is Int -> return value
-                is Number -> return value.toInt()
-                is String -> value.toIntOrNull()?.let { return it }
-            }
-        }
-        return null
-    }
-
-    private fun Any?.longProperty(vararg names: String): Long? {
-        for (name in names) {
-            when (val value = propertyValue(name)) {
-                is Long -> return value
-                is Number -> return value.toLong()
-                is String -> value.toLongOrNull()?.let { return it }
-            }
-        }
-        return null
-    }
-
-    private fun Any?.booleanProperty(vararg names: String): Boolean? {
-        for (name in names) {
-            when (val value = propertyValue(name)) {
-                is Boolean -> return value
-                is String -> when (value.lowercase(Locale.ROOT)) {
-                    "true", "1", "yes", "y", "on" -> return true
-                    "false", "0", "no", "n", "off" -> return false
-                }
-                is Number -> return value.toInt() != 0
-            }
-        }
-        return null
-    }
-
-    private fun Any?.bigDecimalProperty(vararg names: String): BigDecimal? {
-        for (name in names) {
-            when (val value = propertyValue(name)) {
-                is BigDecimal -> return value
-                is Number -> return BigDecimal.valueOf(value.toDouble())
-                is String -> value.toBigDecimalOrNull()?.let { return it }
-            }
-        }
-        return null
-    }
-
-    private inline fun <reified T> Any?.typedList(vararg names: String): List<T> {
-        for (name in names) {
-            when (val value = propertyValue(name)) {
-                is List<*> -> return value.mapNotNull { it as? T }
-                is Array<*> -> return value.mapNotNull { it as? T }
-                is Collection<*> -> return value.mapNotNull { it as? T }
-            }
-        }
-        return emptyList()
-    }
-
-    private fun Any?.listSize(vararg names: String): Int? {
-        for (name in names) {
-            when (val value = propertyValue(name)) {
-                is List<*> -> return value.size
-                is Array<*> -> return value.size
-                is Collection<*> -> return value.size
-            }
-        }
-        return null
-    }
-
-    private fun String.capitalizeSafe(): String {
-        return replaceFirstChar { first ->
-            if (first.isLowerCase()) first.titlecase(Locale.ROOT) else first.toString()
-        }
     }
 
     private fun <T> List<T>.ifNotEmptyElse(fallback: List<T>): List<T> {

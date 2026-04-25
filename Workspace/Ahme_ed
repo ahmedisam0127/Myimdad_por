@@ -2,1177 +2,2655 @@
 Search Path: /storage/emulated/0/AndroidIDEProjects/Myimdad_por/app/src/main/java/com/myimdad_por
 
 ------------------------------
-FILE: AppTopBar.kt
+FILE: BaseViewModel.kt
 ------------------------------
-package com.myimdad_por.ui.components
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Divider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import com.myimdad_por.ui.theme.AppDimens
-import com.myimdad_por.ui.theme.AppShapeTokens
-object AppTopBarDefaults {
-    val horizontalPadding: Dp = AppDimens.Layout.screenPadding
-    val verticalPadding: Dp = AppDimens.Spacing.small
-    val minHeight: Dp = AppDimens.Component.topBarHeight
-    val dividerThickness: Dp = 1.dp
-    val navigationButtonSize: Dp = 48.dp
-}
-@Composable
-fun AppTopBar(
-    title: String,
-    modifier: Modifier = Modifier,
-    subtitle: String? = null,
-    onBackClick: (() -> Unit)? = null,
-    navigationIcon: (@Composable () -> Unit)? = null,
-    actions: @Composable RowScope.() -> Unit = {},
-    centeredTitle: Boolean = false,
-    showDivider: Boolean = true,
-    backgroundColor: Color = MaterialTheme.colorScheme.surface,
-    contentColor: Color = MaterialTheme.colorScheme.onSurface,
-    subtitleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
-) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .statusBarsPadding(),
-        color = backgroundColor,
-        contentColor = contentColor,
-        tonalElevation = 2.dp
+package com.myimdad_por.core.base
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.myimdad_por.core.dispatchers.AppDispatchers
+import com.myimdad_por.core.dispatchers.DefaultAppDispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+abstract class BaseViewModel<S>(
+    protected val dispatchers: AppDispatchers = DefaultAppDispatchers
+) : ViewModel() {
+    private val _uiState = MutableStateFlow<UiState<S>>(UiState.Idle)
+    val uiState: StateFlow<UiState<S>> = _uiState.asStateFlow()
+    private val _uiEvent = MutableSharedFlow<UiEvent>(
+        replay = 0,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val uiEvent: SharedFlow<UiEvent> = _uiEvent.asSharedFlow()
+    protected val currentState: UiState<S>
+        get() = _uiState.value
+    protected val currentData: S?
+        get() = (currentState as? UiState.Success)?.data
+    protected fun setState(state: UiState<S>) {
+        _uiState.value = state
+    }
+    protected fun updateState(reducer: (UiState<S>) -> UiState<S>) {
+        _uiState.update(reducer)
+    }
+    protected fun setLoading() {
+        _uiState.value = UiState.Loading
+    }
+    protected fun setSuccess(data: S) {
+        _uiState.value = UiState.Success(data)
+    }
+    protected fun setError(
+        message: String,
+        throwable: Throwable? = null,
+        code: Int? = null
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = AppTopBarDefaults.minHeight)
+        _uiState.value = UiState.Error(
+            message = message,
+            throwable = throwable,
+            code = code
+        )
+    }
+    protected fun setEmpty() {
+        _uiState.value = UiState.Empty
+    }
+    protected fun setIdle() {
+        _uiState.value = UiState.Idle
+    }
+    protected fun clearError() {
+        if (currentState is UiState.Error) {
+            setIdle()
+        }
+    }
+    protected fun sendEvent(event: UiEvent) {
+        if (!_uiEvent.tryEmit(event)) {
+            viewModelScope.launch(dispatchers.main) {
+                _uiEvent.emit(event)
+            }
+        }
+    }
+    protected fun launch(
+        dispatcher: CoroutineDispatcher = dispatchers.main,
+        onError: ((Throwable) -> Unit)? = null,
+        block: suspend () -> Unit
+    ): Job {
+        return viewModelScope.launch(dispatcher) {
+            try {
+                block()
+            } catch (throwable: Throwable) {
+                if (throwable is CancellationException) throw throwable
+                onError?.invoke(throwable)
+            }
+        }
+    }
+    protected fun launchRequest(
+        loading: Boolean = true,
+        dispatcher: CoroutineDispatcher = dispatchers.io,
+        onErrorMessage: String = "حدث خطأ غير متوقع",
+        block: suspend () -> S
+    ): Job {
+        return launch(
+            dispatcher = dispatchers.main,
+            onError = { throwable ->
+                setError(
+                    message = throwable.message ?: onErrorMessage,
+                    throwable = throwable
+                )
+            }
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = AppTopBarDefaults.horizontalPadding,
-                        vertical = AppTopBarDefaults.verticalPadding
-                    ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val navIcon = when {
-                    navigationIcon != null -> navigationIcon
-                    onBackClick != null -> {
-                        {
-                            AppTopBarBackButton(onClick = onBackClick)
-                        }
-                    }
-                    else -> null
-                }
-                if (centeredTitle) {
-                    if (navIcon != null) {
-                        navIcon()
-                    } else {
-                        Spacer(modifier = Modifier.size(AppTopBarDefaults.navigationButtonSize))
-                    }
-                    Box(
-                        modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        TitleBlock(
-                            title = title,
-                            subtitle = subtitle,
-                            subtitleColor = subtitleColor,
-                            centered = true
-                        )
-                    }
-                    Spacer(modifier = Modifier.size(AppTopBarDefaults.navigationButtonSize))
+            if (loading) setLoading()
+            val result = withContext(dispatcher) {
+                block()
+            }
+            setSuccess(result)
+        }
+    }
+    protected fun launchAction(
+        loading: Boolean = true,
+        dispatcher: CoroutineDispatcher = dispatchers.io,
+        onSuccessEvent: UiEvent? = null,
+        onErrorMessage: String = "حدث خطأ غير متوقع",
+        block: suspend () -> Unit
+    ): Job {
+        return launch(
+            dispatcher = dispatchers.main,
+            onError = { throwable ->
+                setError(
+                    message = throwable.message ?: onErrorMessage,
+                    throwable = throwable
+                )
+            }
+        ) {
+            if (loading) setLoading()
+            withContext(dispatcher) {
+                block()
+            }
+            onSuccessEvent?.let { sendEvent(it) }
+            setIdle()
+        }
+    }
+    protected fun launchStateful(
+        dispatcher: CoroutineDispatcher = dispatchers.io,
+        onErrorMessage: String = "حدث خطأ غير متوقع",
+        block: suspend () -> UiState<S>
+    ): Job {
+        return launch(
+            dispatcher = dispatchers.main,
+            onError = { throwable ->
+                setError(
+                    message = throwable.message ?: onErrorMessage,
+                    throwable = throwable
+                )
+            }
+        ) {
+            setLoading()
+            val newState = withContext(dispatcher) {
+                block()
+            }
+            setState(newState)
+        }
+    }
+}
+
+------------------------------
+FILE: AppDispatchers.kt
+------------------------------
+package com.myimdad_por.core.dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+interface AppDispatchers {
+    val main: CoroutineDispatcher
+    val io: CoroutineDispatcher
+    val default: CoroutineDispatcher
+}
+object DefaultAppDispatchers : AppDispatchers {
+    override val main: CoroutineDispatcher = Dispatchers.Main
+    override val io: CoroutineDispatcher = Dispatchers.IO
+    override val default: CoroutineDispatcher = Dispatchers.Default
+}
+
+------------------------------
+FILE: DashboardRepository.kt
+------------------------------
+package com.myimdad_por.data.repository
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.myimdad_por.core.dispatchers.AppDispatchers
+import com.myimdad_por.core.network.NetworkResult
+import com.myimdad_por.data.local.dao.DashboardDao
+import com.myimdad_por.data.local.entity.DashboardCacheEntity
+import com.myimdad_por.data.mapper.toDomain
+import com.myimdad_por.data.remote.datasource.DashboardRemoteDataSource
+import com.myimdad_por.domain.model.Dashboard
+import com.myimdad_por.domain.model.DashboardAlert
+import com.myimdad_por.domain.model.DashboardQuickAction
+import com.myimdad_por.domain.repository.DashboardRepository as DashboardRepositoryContract
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
+import java.math.BigDecimal
+import javax.inject.Inject
+class DashboardRepositoryImpl @Inject constructor(
+    private val remoteDataSource: DashboardRemoteDataSource,
+    private val dashboardDao: DashboardDao,
+    private val dispatchers: AppDispatchers
+) : DashboardRepositoryContract {
+    private val gson = Gson()
+    private val alertListType = object : TypeToken<List<DashboardAlert>>() {}.type
+    private val quickActionListType = object : TypeToken<List<DashboardQuickAction>>() {}.type
+    override suspend fun getDashboard(forceRefresh: Boolean): Result<Dashboard> {
+        if (!forceRefresh) {
+            getCachedDashboard()?.let { cached ->
+                return Result.success(cached)
+            }
+        }
+        return fetchAndCacheDashboard()
+    }
+    override suspend fun refreshDashboard(): Result<Dashboard> {
+        return fetchAndCacheDashboard()
+    }
+    override fun observeDashboard(): Flow<Dashboard> {
+        return dashboardDao.observeCachedDashboard()
+            .map { entity -> entity?.toDomain() ?: Dashboard() }
+            .flowOn(dispatchers.io)
+    }
+    override suspend fun getCachedDashboard(): Dashboard? {
+        return withContext(dispatchers.io) {
+            dashboardDao.getCachedDashboard()?.toDomain()
+        }
+    }
+    override suspend fun markAlertAsRead(alertId: String): Result<Unit> {
+        if (alertId.isBlank()) {
+            return Result.failure(IllegalArgumentException("alertId must not be blank"))
+        }
+        return withContext(dispatchers.io) {
+            val cached = dashboardDao.getCachedDashboard() ?: return@withContext Result.success(Unit)
+            val currentAlerts = cached.alertsJson.decodeAlerts()
+            if (currentAlerts.none { it.id == alertId }) {
+                return@withContext Result.success(Unit)
+            }
+            Result.success(Unit)
+        }
+    }
+    override suspend fun dismissAlert(alertId: String): Result<Unit> {
+        if (alertId.isBlank()) {
+            return Result.failure(IllegalArgumentException("alertId must not be blank"))
+        }
+        return withContext(dispatchers.io) {
+            val cached = dashboardDao.getCachedDashboard() ?: return@withContext Result.success(Unit)
+            val currentDashboard = cached.toDomain()
+            val updatedDashboard = currentDashboard.copy(
+                alerts = currentDashboard.alerts.filterNot { it.id == alertId }
+            )
+            dashboardDao.upsertCachedDashboard(updatedDashboard.toCacheEntity())
+            Result.success(Unit)
+        }
+    }
+    private suspend fun fetchAndCacheDashboard(): Result<Dashboard> {
+        return when (val result = remoteDataSource.getDashboard()) {
+            is NetworkResult.Success -> {
+                val dashboard = result.data.toDomain()
+                cacheDashboard(dashboard)
+                Result.success(dashboard)
+            }
+            is NetworkResult.Error -> {
+                val cached = getCachedDashboard()
+                if (cached != null) {
+                    Result.success(cached)
                 } else {
-                    if (navIcon != null) {
-                        navIcon()
-                    }
-                    Spacer(modifier = Modifier.size(AppDimens.Spacing.small))
-                    Box(
-                        modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        TitleBlock(
-                            title = title,
-                            subtitle = subtitle,
-                            subtitleColor = subtitleColor,
-                            centered = false
-                        )
-                    }
-                    Spacer(modifier = Modifier.size(AppDimens.Spacing.small))
-                    Row(
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically,
-                        content = actions
-                    )
+                    Result.failure(result.exception)
                 }
             }
-            if (showDivider) {
-                Divider(
-                    modifier = Modifier.fillMaxWidth(),
-                    thickness = AppTopBarDefaults.dividerThickness,
-                    color = MaterialTheme.colorScheme.outlineVariant
-                )
+            NetworkResult.Loading -> {
+                Result.failure(IllegalStateException("Unexpected loading state"))
             }
         }
     }
-}
-@Composable
-private fun TitleBlock(
-    title: String,
-    subtitle: String?,
-    subtitleColor: Color,
-    centered: Boolean
-) {
-    Column(
-        horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.semantics { heading() }
-        )
-        if (!subtitle.isNullOrBlank()) {
-            Spacer(modifier = Modifier.padding(top = AppDimens.Spacing.extraSmall))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = subtitleColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+    private suspend fun cacheDashboard(dashboard: Dashboard) {
+        withContext(dispatchers.io) {
+            dashboardDao.upsertCachedDashboard(dashboard.toCacheEntity())
         }
     }
-}
-@Composable
-fun AppTopBarBackButton(
-    onClick: () -> Unit,
-    contentDescription: String = "رجوع"
-) {
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier
-            .size(AppTopBarDefaults.navigationButtonSize)
-            .semantics {
-                this.contentDescription = contentDescription
-            }
-    ) {
-        Icon(
-            imageVector = Icons.Filled.ArrowBack,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-@Composable
-fun AppTopBarSimple(
-    title: String,
-    onBackClick: (() -> Unit)? = null,
-    actions: @Composable RowScope.() -> Unit = {},
-    modifier: Modifier = Modifier,
-    centeredTitle: Boolean = false
-) {
-    AppTopBar(
-        title = title,
-        modifier = modifier,
-        onBackClick = onBackClick,
-        actions = actions,
-        centeredTitle = centeredTitle,
-        showDivider = true
-    )
-}
-
-------------------------------
-FILE: ErrorState.kt
-------------------------------
-package com.myimdad_por.ui.components
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import com.myimdad_por.ui.theme.AppDimens
-import com.myimdad_por.ui.theme.AppTypography
-import com.myimdad_por.ui.theme.ErrorColor
-import com.myimdad_por.ui.theme.ErrorContainer
-import com.myimdad_por.ui.theme.TextPrimaryColor
-import com.myimdad_por.ui.theme.TextSecondaryColor
-enum class ErrorStateStyle {
-    FullScreen,
-    Card,
-    Inline
-}
-@Composable
-fun ErrorState(
-    message: String,
-    modifier: Modifier = Modifier,
-    title: String = "حدث خطأ",
-    details: String? = null,
-    retryText: String = "إعادة المحاولة",
-    dismissText: String? = null,
-    onRetry: (() -> Unit)? = null,
-    onDismiss: (() -> Unit)? = null,
-    style: ErrorStateStyle = ErrorStateStyle.FullScreen,
-    contentDescription: String? = null
-) {
-    val safeMessage = remember(message) {
-        message.trim().ifBlank { "تعذر إكمال العملية" }
-    }
-    when (style) {
-        ErrorStateStyle.FullScreen -> FullScreenErrorState(
-            title = title,
-            message = safeMessage,
-            details = details,
-            retryText = retryText,
-            dismissText = dismissText,
-            onRetry = onRetry,
-            onDismiss = onDismiss,
-            modifier = modifier,
-            contentDescription = contentDescription
-        )
-        ErrorStateStyle.Card -> CardErrorState(
-            title = title,
-            message = safeMessage,
-            details = details,
-            retryText = retryText,
-            dismissText = dismissText,
-            onRetry = onRetry,
-            onDismiss = onDismiss,
-            modifier = modifier,
-            contentDescription = contentDescription
-        )
-        ErrorStateStyle.Inline -> InlineErrorState(
-            title = title,
-            message = safeMessage,
-            details = details,
-            retryText = retryText,
-            dismissText = dismissText,
-            onRetry = onRetry,
-            onDismiss = onDismiss,
-            modifier = modifier,
-            contentDescription = contentDescription
-        )
-    }
-}
-@Composable
-fun FullScreenErrorState(
-    title: String,
-    message: String,
-    modifier: Modifier = Modifier,
-    details: String? = null,
-    retryText: String = "إعادة المحاولة",
-    dismissText: String? = null,
-    onRetry: (() -> Unit)? = null,
-    onDismiss: (() -> Unit)? = null,
-    contentDescription: String? = null
-) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 280.dp)
-            .semantics {
-                role = Role.Image
-                if (!contentDescription.isNullOrBlank()) {
-                    this.contentDescription = contentDescription
-                }
-            },
-        color = Color.Transparent
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(AppDimens.Layout.screenPadding),
-            contentAlignment = Alignment.Center
-        ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = AppDimens.Layout.contentMaxWidth),
-                shape = RoundedCornerShape(AppDimens.Radius.large),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.medium)
-            ) {
-                ErrorStateContent(
-                    title = title,
-                    message = message,
-                    details = details,
-                    retryText = retryText,
-                    dismissText = dismissText,
-                    onRetry = onRetry,
-                    onDismiss = onDismiss
-                )
-            }
-        }
-    }
-}
-@Composable
-fun CardErrorState(
-    title: String,
-    message: String,
-    modifier: Modifier = Modifier,
-    details: String? = null,
-    retryText: String = "إعادة المحاولة",
-    dismissText: String? = null,
-    onRetry: (() -> Unit)? = null,
-    onDismiss: (() -> Unit)? = null,
-    contentDescription: String? = null
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .semantics {
-                role = Role.Image
-                if (!contentDescription.isNullOrBlank()) {
-                    this.contentDescription = contentDescription
-                }
-            },
-        shape = RoundedCornerShape(AppDimens.Radius.large),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.low)
-    ) {
-        ErrorStateContent(
-            title = title,
-            message = message,
-            details = details,
-            retryText = retryText,
-            dismissText = dismissText,
-            onRetry = onRetry,
-            onDismiss = onDismiss
-        )
-    }
-}
-@Composable
-fun InlineErrorState(
-    title: String,
-    message: String,
-    modifier: Modifier = Modifier,
-    details: String? = null,
-    retryText: String = "إعادة المحاولة",
-    dismissText: String? = null,
-    onRetry: (() -> Unit)? = null,
-    onDismiss: (() -> Unit)? = null,
-    contentDescription: String? = null
-) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .semantics {
-                role = Role.Image
-                if (!contentDescription.isNullOrBlank()) {
-                    this.contentDescription = contentDescription
-                }
-            },
-        color = Color.Transparent
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    color = ErrorContainer,
-                    shape = RoundedCornerShape(AppDimens.Radius.large)
-                )
-                .padding(AppDimens.Layout.screenPadding),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-        ) {
-            ErrorBadge()
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
-            ) {
-                Text(
-                    text = title,
-                    style = AppTypography.titleMedium,
-                    color = TextPrimaryColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = message,
-                    style = AppTypography.bodyMedium,
-                    color = TextSecondaryColor
-                )
-                if (!details.isNullOrBlank()) {
-                    Text(
-                        text = details,
-                        style = AppTypography.bodySmall,
-                        color = TextSecondaryColor
-                    )
-                }
-                ErrorActionsRow(
-                    retryText = retryText,
-                    dismissText = dismissText,
-                    onRetry = onRetry,
-                    onDismiss = onDismiss
-                )
-            }
-        }
-    }
-}
-@Composable
-private fun ErrorStateContent(
-    title: String,
-    message: String,
-    details: String?,
-    retryText: String,
-    dismissText: String?,
-    onRetry: (() -> Unit)?,
-    onDismiss: (() -> Unit)?
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(ErrorContainer)
-            .padding(AppDimens.Layout.screenPadding),
-        verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-        ) {
-            ErrorBadge()
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.extraSmall)
-            ) {
-                Text(
-                    text = title,
-                    style = AppTypography.titleLarge,
-                    color = TextPrimaryColor,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = message,
-                    style = AppTypography.bodyLarge,
-                    color = TextSecondaryColor
-                )
-            }
-        }
-        if (!details.isNullOrBlank()) {
-            Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-            Text(
-                text = details,
-                style = AppTypography.bodyMedium,
-                color = TextSecondaryColor
-            )
-        }
-        ErrorActionsRow(
-            retryText = retryText,
-            dismissText = dismissText,
-            onRetry = onRetry,
-            onDismiss = onDismiss
-        )
-    }
-}
-@Composable
-private fun ErrorActionsRow(
-    retryText: String,
-    dismissText: String?,
-    onRetry: (() -> Unit)?,
-    onDismiss: (() -> Unit)?
-) {
-    if (onRetry == null && onDismiss == null) return
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (onRetry != null) {
-            AppButton(
-                text = retryText,
-                onClick = onRetry,
-                variant = AppButtonVariant.Primary,
-                fullWidth = false
-            )
-        }
-        if (onDismiss != null) {
-            AppButton(
-                text = dismissText ?: "إغلاق",
-                onClick = onDismiss,
-                variant = AppButtonVariant.Outlined,
-                fullWidth = false
-            )
-        }
-    }
-}
-@Composable
-private fun ErrorBadge() {
-    Box(
-        modifier = Modifier
-            .size(52.dp)
-            .background(
-                color = Color.White.copy(alpha = 0.8f),
-                shape = RoundedCornerShape(AppDimens.Radius.round)
+    private fun DashboardCacheEntity.toDomain(): Dashboard {
+        return Dashboard(
+            overview = com.myimdad_por.domain.model.DashboardOverview(
+                title = overviewTitle,
+                subtitle = overviewSubtitle,
+                greeting = overviewGreeting,
+                totalMetrics = overviewTotalMetrics,
+                positiveMetrics = overviewPositiveMetrics,
+                negativeMetrics = overviewNegativeMetrics
             ),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "!",
-            style = AppTypography.titleLarge,
-            color = ErrorColor,
-            textAlign = TextAlign.Center
+            sales = com.myimdad_por.domain.model.DashboardSalesSummary(
+                todaySalesCount = salesTodaySalesCount,
+                todayRevenue = salesTodayRevenue.toBigDecimalSafe(),
+                monthSalesCount = salesMonthSalesCount,
+                monthRevenue = salesMonthRevenue.toBigDecimalSafe(),
+                pendingInvoicesCount = salesPendingInvoicesCount,
+                returnsCount = salesReturnsCount,
+                topSellingProductName = salesTopSellingProductName,
+                growthRatePercent = salesGrowthRatePercent?.toBigDecimalSafe()
+            ),
+            inventory = com.myimdad_por.domain.model.DashboardInventorySummary(
+                productsCount = inventoryProductsCount,
+                lowStockCount = inventoryLowStockCount,
+                outOfStockCount = inventoryOutOfStockCount,
+                totalStockValue = inventoryTotalStockValue.toBigDecimalSafe(),
+                reservedItemsCount = inventoryReservedItemsCount,
+                mostCriticalProductName = inventoryMostCriticalProductName
+            ),
+            customers = com.myimdad_por.domain.model.DashboardCustomerSummary(
+                customersCount = customersCount,
+                newCustomersCount = customersNewCustomersCount,
+                activeCustomersCount = customersActiveCustomersCount,
+                dueCustomersCount = customersDueCustomersCount,
+                topCustomerName = customersTopCustomerName,
+                averageOrderValue = customersAverageOrderValue.toBigDecimalSafe()
+            ),
+            financial = com.myimdad_por.domain.model.DashboardFinancialSummary(
+                totalCashIn = financialTotalCashIn.toBigDecimalSafe(),
+                totalCashOut = financialTotalCashOut.toBigDecimalSafe(),
+                netBalance = financialNetBalance.toBigDecimalSafe(),
+                receivables = financialReceivables.toBigDecimalSafe(),
+                payables = financialPayables.toBigDecimalSafe(),
+                profitEstimate = financialProfitEstimate?.toBigDecimalSafe(),
+                currencyCode = financialCurrencyCode.ifBlank { "---" }
+            ),
+            alerts = alertsJson.decodeAlerts(),
+            quickActions = quickActionsJson.decodeQuickActions(),
+            lastUpdatedAtEpochMillis = lastUpdatedAtEpochMillis
         )
+    }
+    private fun Dashboard.toCacheEntity(): DashboardCacheEntity {
+        return DashboardCacheEntity(
+            id = 0,
+            overviewTitle = overview.title.ifBlank { "لوحة التحكم" },
+            overviewSubtitle = overview.subtitle,
+            overviewGreeting = overview.greeting,
+            overviewTotalMetrics = overview.totalMetrics,
+            overviewPositiveMetrics = overview.positiveMetrics,
+            overviewNegativeMetrics = overview.negativeMetrics,
+            salesTodaySalesCount = sales.todaySalesCount,
+            salesTodayRevenue = sales.todayRevenue.toPlainStringSafe(),
+            salesMonthSalesCount = sales.monthSalesCount,
+            salesMonthRevenue = sales.monthRevenue.toPlainStringSafe(),
+            salesPendingInvoicesCount = sales.pendingInvoicesCount,
+            salesReturnsCount = sales.returnsCount,
+            salesTopSellingProductName = sales.topSellingProductName,
+            salesGrowthRatePercent = sales.growthRatePercent?.toPlainStringSafe(),
+            inventoryProductsCount = inventory.productsCount,
+            inventoryLowStockCount = inventory.lowStockCount,
+            inventoryOutOfStockCount = inventory.outOfStockCount,
+            inventoryTotalStockValue = inventory.totalStockValue.toPlainStringSafe(),
+            inventoryReservedItemsCount = inventory.reservedItemsCount,
+            inventoryMostCriticalProductName = inventory.mostCriticalProductName,
+            customersCount = customers.customersCount,
+            customersNewCustomersCount = customers.newCustomersCount,
+            customersActiveCustomersCount = customers.activeCustomersCount,
+            customersDueCustomersCount = customers.dueCustomersCount,
+            customersTopCustomerName = customers.topCustomerName,
+            customersAverageOrderValue = customers.averageOrderValue.toPlainStringSafe(),
+            financialTotalCashIn = financial.totalCashIn.toPlainStringSafe(),
+            financialTotalCashOut = financial.totalCashOut.toPlainStringSafe(),
+            financialNetBalance = financial.netBalance.toPlainStringSafe(),
+            financialReceivables = financial.receivables.toPlainStringSafe(),
+            financialPayables = financial.payables.toPlainStringSafe(),
+            financialProfitEstimate = financial.profitEstimate?.toPlainStringSafe(),
+            financialCurrencyCode = financial.currencyCode.ifBlank { "---" },
+            alertsJson = gson.toJson(alerts),
+            quickActionsJson = gson.toJson(quickActions),
+            lastUpdatedAtEpochMillis = lastUpdatedAtEpochMillis
+        )
+    }
+    private fun String?.decodeAlerts(): List<DashboardAlert> {
+        if (this.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val decoded: List<DashboardAlert>? = gson.fromJson(this, alertListType)
+            decoded.orEmpty()
+        }.getOrDefault(emptyList())
+    }
+    private fun String?.decodeQuickActions(): List<DashboardQuickAction> {
+        if (this.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val decoded: List<DashboardQuickAction>? = gson.fromJson(this, quickActionListType)
+            decoded.orEmpty()
+        }.getOrDefault(emptyList())
+    }
+    private fun String.toBigDecimalSafe(): BigDecimal {
+        return runCatching { BigDecimal(this) }.getOrDefault(BigDecimal.ZERO)
+    }
+    private fun BigDecimal.toPlainStringSafe(): String {
+        return toPlainString()
     }
 }
 
 ------------------------------
-FILE: LoadingIndicator.kt
+FILE: Expense.kt
 ------------------------------
-package com.myimdad_por.ui.components
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import com.myimdad_por.ui.theme.AppDimens
-import com.myimdad_por.ui.theme.AppShapeTokens
-import com.myimdad_por.ui.theme.AppTypography
-enum class LoadingIndicatorVariant {
-    Circular,
-    Linear,
-    Dots
-}
-enum class LoadingIndicatorSize(
-    val indicatorSize: Dp,
-    val strokeWidth: Dp
+package com.myimdad_por.domain.model
+import java.math.BigDecimal
+import java.math.RoundingMode
+import java.time.LocalDateTime
+import java.util.UUID
+data class Expense(
+    val id: String = UUID.randomUUID().toString(),
+    val expenseNumber: String,
+    val category: ExpenseCategory,
+    val title: String,
+    val amount: BigDecimal,
+    val expenseDate: LocalDateTime = LocalDateTime.now(),
+    val paidAmount: BigDecimal = BigDecimal.ZERO,
+    val paymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val status: ExpenseStatus = ExpenseStatus.PENDING,
+    val referenceNumber: String? = null,
+    val supplierName: String? = null,
+    val employeeId: String? = null,
+    val note: String? = null
 ) {
-    Small(
-        indicatorSize = 20.dp,
-        strokeWidth = 2.dp
-    ),
-    Medium(
-        indicatorSize = 32.dp,
-        strokeWidth = 3.dp
-    ),
-    Large(
-        indicatorSize = 48.dp,
-        strokeWidth = 4.dp
-    )
-}
-@Composable
-fun LoadingIndicator(
-    modifier: Modifier = Modifier,
-    variant: LoadingIndicatorVariant = LoadingIndicatorVariant.Circular,
-    size: LoadingIndicatorSize = LoadingIndicatorSize.Medium,
-    title: String? = null,
-    message: String? = null,
-    progress: Float? = null,
-    tint: Color? = null,
-    trackColor: Color? = null,
-    centered: Boolean = true,
-    contentPadding: PaddingValues = PaddingValues(AppDimens.Spacing.large),
-) {
-    val colorScheme = MaterialTheme.colorScheme
-    val resolvedTint = tint ?: colorScheme.primary
-    val resolvedTrackColor = trackColor ?: resolvedTint.copy(alpha = 0.16f)
-    val accessibilityText = title ?: message ?: "جاري التحميل"
-    val semanticsModifier = Modifier.semantics {
-        contentDescription = accessibilityText
-        liveRegion = LiveRegionMode.Polite
+    init {
+        require(expenseNumber.isNotBlank()) { "expenseNumber cannot be blank" }
+        require(title.isNotBlank()) { "title cannot be blank" }
+        require(amount >= BigDecimal.ZERO) { "amount cannot be negative" }
+        require(paidAmount >= BigDecimal.ZERO) { "paidAmount cannot be negative" }
+        require(expenseDate.isBefore(LocalDateTime.now().plusSeconds(5))) {
+            "expenseDate cannot be in the future"
+        }
+        require(paidAmount <= amount) { "paidAmount cannot exceed amount" }
     }
-    if (centered) {
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .then(semanticsModifier),
-            contentAlignment = Alignment.Center
-        ) {
-            LoadingContent(
-                variant = variant,
-                size = size,
-                title = title,
-                message = message,
-                progress = progress,
-                tint = resolvedTint,
-                trackColor = resolvedTrackColor,
-                contentPadding = contentPadding
+    val remainingAmount: BigDecimal
+        get() = amount.subtract(paidAmount).money()
+    val paymentStatus: PaymentStatus
+        get() = when {
+            amount <= BigDecimal.ZERO -> PaymentStatus.PAID
+            remainingAmount == BigDecimal.ZERO && paidAmount > BigDecimal.ZERO -> PaymentStatus.PAID
+            paidAmount > BigDecimal.ZERO -> PaymentStatus.PARTIALLY_PAID
+            else -> PaymentStatus.PENDING
+        }
+    fun isFullyPaid(): Boolean = paymentStatus == PaymentStatus.PAID
+    fun isPartialPayment(): Boolean = paymentStatus == PaymentStatus.PARTIALLY_PAID
+    fun withPayment(amount: BigDecimal): Expense {
+        require(amount >= BigDecimal.ZERO) { "amount cannot be negative" }
+        val updatedPaidAmount = paidAmount.add(amount)
+        require(updatedPaidAmount <= this.amount) {
+            "paidAmount cannot exceed expense amount"
+        }
+        return copy(paidAmount = updatedPaidAmount.money())
+    }
+    fun markPaid(): Expense = copy(
+        status = ExpenseStatus.PAID,
+        paidAmount = amount.money()
+    )
+    fun markCancelled(): Expense = copy(status = ExpenseStatus.CANCELLED)
+    fun markApproved(): Expense = copy(status = ExpenseStatus.APPROVED)
+}
+enum class ExpenseCategory {
+    RENT,
+    SALARY,
+    UTILITIES,
+    TRANSPORT,
+    MAINTENANCE,
+    PURCHASE,
+    TAX,
+    MARKETING,
+    OFFICE,
+    OTHER
+}
+enum class ExpenseStatus {
+    PENDING,
+    APPROVED,
+    PAID,
+    CANCELLED
+}
+private fun BigDecimal.money(): BigDecimal = this.setScale(2, RoundingMode.HALF_UP)
+
+------------------------------
+FILE: Sale.kt
+------------------------------
+package com.myimdad_por.domain.model
+import java.math.BigDecimal
+import java.math.RoundingMode
+import java.time.LocalDateTime
+import java.util.UUID
+data class Sale(
+    val id: String = UUID.randomUUID().toString(),
+    val invoiceNumber: String,
+    val customerId: String? = null,
+    val employeeId: String,
+    val items: List<SaleItem>,
+    val paidAmount: BigDecimal = BigDecimal.ZERO,
+    val saleStatus: SaleStatus = SaleStatus.COMPLETED,
+    val createdAt: LocalDateTime = LocalDateTime.now(),
+    val note: String? = null
+) {
+    init {
+        require(invoiceNumber.isNotBlank()) { "invoiceNumber cannot be blank" }
+        require(employeeId.isNotBlank()) { "employeeId cannot be blank" }
+        require(items.isNotEmpty()) { "items cannot be empty" }
+        require(paidAmount >= BigDecimal.ZERO) { "paidAmount cannot be negative" }
+    }
+    val subtotalAmount: BigDecimal
+        get() = items.fold(BigDecimal.ZERO) { acc: BigDecimal, item: SaleItem ->
+            acc.add(item.calculateSubtotal())
+        }.money()
+    val taxAmount: BigDecimal
+        get() = items.fold(BigDecimal.ZERO) { acc: BigDecimal, item: SaleItem ->
+            acc.add(item.netTaxAmount)
+        }.money()
+    val discountAmount: BigDecimal
+        get() = items.fold(BigDecimal.ZERO) { acc: BigDecimal, item: SaleItem ->
+            acc.add(item.netDiscountAmount)
+        }.money()
+    val totalAmount: BigDecimal
+        get() = subtotalAmount
+            .add(taxAmount)
+            .subtract(discountAmount)
+            .money()
+    val remainingAmount: BigDecimal
+        get() {
+            val remaining = totalAmount.subtract(paidAmount)
+            return if (remaining > BigDecimal.ZERO) remaining.money() else BigDecimal.ZERO.setScale(2)
+        }
+    val paymentStatus: PaymentStatus
+        get() = when {
+            totalAmount <= BigDecimal.ZERO -> PaymentStatus.PAID
+            remainingAmount == BigDecimal.ZERO && paidAmount > BigDecimal.ZERO -> PaymentStatus.PAID
+            paidAmount > BigDecimal.ZERO -> PaymentStatus.PARTIALLY_PAID
+            else -> PaymentStatus.PENDING
+        }
+    fun isFullyPaid(): Boolean = paymentStatus == PaymentStatus.PAID
+    fun hasReturns(): Boolean = items.any { it.isReturn }
+    fun containsDiscounts(): Boolean = items.any { it.hasDiscount }
+    fun containsTaxedItems(): Boolean = items.any { it.hasTax }
+    fun withAdditionalPayment(amount: BigDecimal): Sale {
+        require(amount >= BigDecimal.ZERO) { "amount cannot be negative" }
+        return copy(paidAmount = paidAmount.add(amount).money())
+    }
+}
+enum class SaleStatus {
+    COMPLETED,
+    CANCELLED,
+    REFUNDED
+}
+private fun BigDecimal.money(): BigDecimal = this.setScale(2, RoundingMode.HALF_UP)
+
+------------------------------
+FILE: StockItem.kt
+------------------------------
+package com.myimdad_por.domain.model
+import java.time.LocalDate
+import kotlin.math.abs
+data class StockItem(
+    val productBarcode: String,
+    val productName: String,
+    val quantity: Double,
+    val location: String,
+    val unitOfMeasure: UnitOfMeasure = UnitOfMeasure.UNIT,
+    val displayName: String? = null,
+    val expiryDate: LocalDate? = null
+) {
+    init {
+        require(isValidBarcode(productBarcode)) { "productBarcode is invalid" }
+        require(productName.isNotBlank()) { "productName cannot be blank" }
+        require(location.isNotBlank()) { "location cannot be blank" }
+        require(quantity.isFinite()) { "quantity must be finite" }
+        require(quantity >= 0.0) { "quantity cannot be negative" }
+        if (!unitOfMeasure.isDecimalAllowed) {
+            require(isWholeNumber(quantity)) {
+                "Unit ${unitOfMeasure.name} does not allow decimal quantities"
+            }
+        }
+        expiryDate?.let {
+            require(!it.isBefore(LocalDate.of(2000, 1, 1))) {
+                "expiryDate is invalid"
+            }
+        }
+    }
+    val normalizedBarcode: String
+        get() = productBarcode.trim()
+    val effectiveName: String
+        get() = displayName?.trim().takeUnless { it.isNullOrBlank() } ?: productName.trim()
+    val normalizedLocation: String
+        get() = location.trim()
+    val isOutOfStock: Boolean
+        get() = quantity == 0.0
+    fun isExpired(today: LocalDate = LocalDate.now()): Boolean {
+        return expiryDate?.isBefore(today) == true
+    }
+    fun expiresWithin(days: Long, today: LocalDate = LocalDate.now()): Boolean {
+        require(days >= 0) { "days cannot be negative" }
+        val expiry = expiryDate ?: return false
+        return !expiry.isBefore(today) && !expiry.isAfter(today.plusDays(days))
+    }
+    companion object {
+        private const val EPSILON = 1e-9
+        private fun isWholeNumber(value: Double): Boolean {
+            return abs(value - value.toLong().toDouble()) < EPSILON
+        }
+        private fun isValidBarcode(value: String): Boolean {
+            val normalized = value.trim()
+            if (normalized.isEmpty()) return false
+            if (normalized.length !in 4..64) return false
+            return normalized.all { ch ->
+                ch.isLetterOrDigit() || ch == '-' || ch == '_' || ch == '.'
+            }
+        }
+    }
+}
+
+------------------------------
+FILE: SubscriptionInfo.kt
+------------------------------
+package com.myimdad_por.domain.model
+data class SubscriptionInfo(
+    val subscriptionId: String,
+    val plan: SubscriptionPlan,
+    val status: SubscriptionStatus,
+    val startDateMillis: Long,
+    val expiryDateMillis: Long,
+    val maxUsers: Int,
+    val maxInvoicesPerMonth: Int? = null,
+    val featuresEnabled: Set<SubscriptionFeature> = emptySet(),
+    val offlineGracePeriodDays: Int = 0,
+    val lastSyncedAtMillis: Long? = null,
+    val renewedAtMillis: Long? = null,
+    val notes: String? = null,
+    val metadata: Map<String, String> = emptyMap()
+) {
+    init {
+        require(subscriptionId.isNotBlank()) { "subscriptionId cannot be blank." }
+        require(startDateMillis > 0L) { "startDateMillis must be greater than zero." }
+        require(expiryDateMillis > 0L) { "expiryDateMillis must be greater than zero." }
+        require(startDateMillis <= expiryDateMillis) {
+            "startDateMillis must be less than or equal to expiryDateMillis."
+        }
+        require(maxUsers > 0) { "maxUsers must be greater than zero." }
+        require(offlineGracePeriodDays >= 0) { "offlineGracePeriodDays cannot be negative." }
+        maxInvoicesPerMonth?.let {
+            require(it > 0) { "maxInvoicesPerMonth must be greater than zero when provided." }
+        }
+        lastSyncedAtMillis?.let {
+            require(it > 0L) { "lastSyncedAtMillis must be greater than zero when provided." }
+        }
+        renewedAtMillis?.let {
+            require(it > 0L) { "renewedAtMillis must be greater than zero when provided." }
+        }
+        notes?.let {
+            require(it.isNotBlank()) { "notes cannot be blank when provided." }
+        }
+    }
+    val isExpired: Boolean
+        get() = System.currentTimeMillis() > expiryDateMillis
+    val isInGracePeriod: Boolean
+        get() {
+            if (!isExpired || offlineGracePeriodDays == 0) return false
+            val graceEnd = expiryDateMillis + offlineGracePeriodDays.toLong() * 24L * 60L * 60L * 1000L
+            return System.currentTimeMillis() <= graceEnd
+        }
+    val canOperateOffline: Boolean
+        get() = status == SubscriptionStatus.ACTIVE && !isExpired || isInGracePeriod
+    val isActive: Boolean
+        get() = status == SubscriptionStatus.ACTIVE && (System.currentTimeMillis() <= expiryDateMillis || isInGracePeriod)
+}
+enum class SubscriptionPlan {
+    STARTER,
+    PRO,
+    BUSINESS,
+    ENTERPRISE,
+    CUSTOM
+}
+enum class SubscriptionStatus {
+    ACTIVE,
+    EXPIRED,
+    GRACE_PERIOD,
+    SUSPENDED,
+    CANCELED,
+    PENDING
+}
+enum class SubscriptionFeature {
+    ADVANCED_REPORTS,
+    MULTI_BRANCH,
+    API_ACCESS,
+    PAYMENT_GATEWAY,
+    TAX_INVOICE,
+    LEGAL_INVOICE,
+    OFFLINE_MODE,
+    AUDIT_LOGS,
+    EXPORT_EXCEL,
+    EXPORT_PDF,
+    ROLE_BASED_ACCESS,
+    BACKUP_SYNC
+}
+
+------------------------------
+FILE: Dashboard.kt
+------------------------------
+package com.myimdad_por.domain.model
+import java.math.BigDecimal
+import java.math.RoundingMode
+data class Dashboard(
+    val overview: DashboardOverview = DashboardOverview(),
+    val sales: DashboardSalesSummary = DashboardSalesSummary(),
+    val inventory: DashboardInventorySummary = DashboardInventorySummary(),
+    val customers: DashboardCustomerSummary = DashboardCustomerSummary(),
+    val financial: DashboardFinancialSummary = DashboardFinancialSummary(),
+    val alerts: List<DashboardAlert> = emptyList(),
+    val quickActions: List<DashboardQuickAction> = emptyList(),
+    val lastUpdatedAtEpochMillis: Long? = null
+) {
+    val hasAlerts: Boolean
+        get() = alerts.isNotEmpty()
+    val hasQuickActions: Boolean
+        get() = quickActions.isNotEmpty()
+    val isFresh: Boolean
+        get() = lastUpdatedAtEpochMillis != null
+}
+data class DashboardOverview(
+    val title: String = "لوحة التحكم",
+    val subtitle: String? = null,
+    val greeting: String? = null,
+    val totalMetrics: Int = 0,
+    val positiveMetrics: Int = 0,
+    val negativeMetrics: Int = 0
+) {
+    val hasPerformanceData: Boolean
+        get() = totalMetrics > 0
+}
+data class DashboardSalesSummary(
+    val todaySalesCount: Int = 0,
+    val todayRevenue: BigDecimal = BigDecimal.ZERO,
+    val monthSalesCount: Int = 0,
+    val monthRevenue: BigDecimal = BigDecimal.ZERO,
+    val pendingInvoicesCount: Int = 0,
+    val returnsCount: Int = 0,
+    val topSellingProductName: String? = null,
+    val growthRatePercent: BigDecimal? = null
+) {
+    val hasGrowthRate: Boolean
+        get() = growthRatePercent != null
+}
+data class DashboardInventorySummary(
+    val productsCount: Int = 0,
+    val lowStockCount: Int = 0,
+    val outOfStockCount: Int = 0,
+    val totalStockValue: BigDecimal = BigDecimal.ZERO,
+    val reservedItemsCount: Int = 0,
+    val mostCriticalProductName: String? = null
+) {
+    val hasStockRisk: Boolean
+        get() = lowStockCount > 0 || outOfStockCount > 0
+}
+data class DashboardCustomerSummary(
+    val customersCount: Int = 0,
+    val newCustomersCount: Int = 0,
+    val activeCustomersCount: Int = 0,
+    val dueCustomersCount: Int = 0,
+    val topCustomerName: String? = null,
+    val averageOrderValue: BigDecimal = BigDecimal.ZERO
+)
+data class DashboardFinancialSummary(
+    val totalCashIn: BigDecimal = BigDecimal.ZERO,
+    val totalCashOut: BigDecimal = BigDecimal.ZERO,
+    val netBalance: BigDecimal = BigDecimal.ZERO,
+    val receivables: BigDecimal = BigDecimal.ZERO,
+    val payables: BigDecimal = BigDecimal.ZERO,
+    val profitEstimate: BigDecimal? = null,
+    val currencyCode: String = "SDG"
+) {
+    val hasProfitData: Boolean
+        get() = profitEstimate != null
+}
+data class DashboardMetric(
+    val key: String,
+    val label: String,
+    val value: BigDecimal,
+    val formattedValue: String? = null,
+    val deltaPercent: BigDecimal? = null,
+    val deltaLabel: String? = null,
+    val isPositiveTrend: Boolean = true,
+    val accentKey: String? = null
+) {
+    val hasDelta: Boolean
+        get() = deltaPercent != null
+    fun normalizedValue(scale: Int = 2): BigDecimal = value.setScale(scale, RoundingMode.HALF_UP)
+}
+enum class DashboardAlertLevel {
+    Info,
+    Warning,
+    Critical
+}
+data class DashboardAlert(
+    val id: String,
+    val title: String,
+    val message: String,
+    val level: DashboardAlertLevel = DashboardAlertLevel.Info,
+    val actionLabel: String? = null,
+    val targetRoute: String? = null,
+    val isDismissible: Boolean = true
+) {
+    val hasAction: Boolean
+        get() = !actionLabel.isNullOrBlank() && !targetRoute.isNullOrBlank()
+}
+data class DashboardQuickAction(
+    val id: String,
+    val title: String,
+    val description: String? = null,
+    val iconName: String? = null,
+    val route: String? = null,
+    val isEnabled: Boolean = true,
+    val requiresPermission: String? = null
+) {
+    val canNavigate: Boolean
+        get() = isEnabled && !route.isNullOrBlank()
+}
+fun BigDecimal.money(scale: Int = 2): BigDecimal = setScale(scale, RoundingMode.HALF_UP)
+
+------------------------------
+FILE: ExpenseRepository.kt
+------------------------------
+package com.myimdad_por.domain.repository
+import com.myimdad_por.domain.model.Expense
+import com.myimdad_por.domain.model.ExpenseCategory
+import com.myimdad_por.domain.model.ExpenseStatus
+import com.myimdad_por.domain.model.PaymentMethod
+import java.math.BigDecimal
+import java.time.LocalDateTime
+import kotlinx.coroutines.flow.Flow
+interface ExpenseRepository {
+    fun observeAllExpenses(): Flow<List<Expense>>
+    fun observeExpensesByCategory(category: ExpenseCategory): Flow<List<Expense>>
+    fun observeExpensesByStatus(status: ExpenseStatus): Flow<List<Expense>>
+    fun observePendingExpenses(): Flow<List<Expense>>
+    fun observeExpensesByEmployee(employeeId: String): Flow<List<Expense>>
+    suspend fun getExpenseById(id: String): Expense?
+    suspend fun getExpenseByNumber(expenseNumber: String): Expense?
+    suspend fun searchExpenses(query: String): List<Expense>
+    suspend fun getExpenses(
+        from: LocalDateTime? = null,
+        to: LocalDateTime? = null,
+        category: ExpenseCategory? = null,
+        status: ExpenseStatus? = null,
+        employeeId: String? = null,
+        supplierName: String? = null
+    ): List<Expense>
+    suspend fun getExpensesByPaymentMethod(
+        paymentMethod: PaymentMethod
+    ): List<Expense>
+    suspend fun saveExpense(expense: Expense): Result<Expense>
+    suspend fun saveExpenses(expenses: List<Expense>): Result<List<Expense>>
+    suspend fun updateExpense(expense: Expense): Result<Expense>
+    suspend fun markExpensePaid(
+        expenseId: String,
+        paidAmount: BigDecimal? = null
+    ): Result<Expense>
+    suspend fun markExpenseApproved(expenseId: String): Result<Expense>
+    suspend fun markExpenseCancelled(expenseId: String): Result<Expense>
+    suspend fun deleteExpense(id: String): Result<Unit>
+    suspend fun deleteExpenses(ids: List<String>): Result<Int>
+    suspend fun clearAll(): Result<Unit>
+    suspend fun countExpenses(): Long
+    suspend fun countExpensesByCategory(category: ExpenseCategory): Long
+    suspend fun countPendingExpenses(): Long
+    suspend fun getTotalExpenses(
+        from: LocalDateTime? = null,
+        to: LocalDateTime? = null,
+        category: ExpenseCategory? = null,
+        status: ExpenseStatus? = null,
+        employeeId: String? = null
+    ): BigDecimal
+    suspend fun getTotalPaidExpenses(
+        from: LocalDateTime? = null,
+        to: LocalDateTime? = null,
+        category: ExpenseCategory? = null
+    ): BigDecimal
+    suspend fun getBudgetUsage(
+        category: ExpenseCategory,
+        budgetAmount: BigDecimal,
+        from: LocalDateTime? = null,
+        to: LocalDateTime? = null
+    ): ExpenseBudgetUsage
+    suspend fun isBudgetExceeded(
+        category: ExpenseCategory,
+        budgetAmount: BigDecimal,
+        from: LocalDateTime? = null,
+        to: LocalDateTime? = null
+    ): Boolean
+}
+data class ExpenseBudgetUsage(
+    val category: ExpenseCategory,
+    val budgetAmount: BigDecimal,
+    val spentAmount: BigDecimal,
+    val remainingAmount: BigDecimal,
+    val usagePercent: Double
+) {
+    init {
+        require(budgetAmount >= BigDecimal.ZERO) { "budgetAmount cannot be negative." }
+        require(spentAmount >= BigDecimal.ZERO) { "spentAmount cannot be negative." }
+        require(remainingAmount >= BigDecimal.ZERO) { "remainingAmount cannot be negative." }
+        require(usagePercent.isFinite()) { "usagePercent must be finite." }
+    }
+    val isOverBudget: Boolean
+        get() = spentAmount > budgetAmount
+}
+
+------------------------------
+FILE: SalesRepository.kt
+------------------------------
+package com.myimdad_por.domain.repository
+import com.myimdad_por.domain.model.PaymentStatus
+import com.myimdad_por.domain.model.Sale
+import com.myimdad_por.domain.model.SaleStatus
+import java.math.BigDecimal
+import java.time.LocalDateTime
+import kotlinx.coroutines.flow.Flow
+interface SalesRepository {
+    fun observeAllSales(): Flow<List<Sale>>
+    fun observeSalesByCustomer(customerId: String): Flow<List<Sale>>
+    fun observeSalesByEmployee(employeeId: String): Flow<List<Sale>>
+    fun observeSalesByStatus(status: SaleStatus): Flow<List<Sale>>
+    fun observePendingSales(): Flow<List<Sale>>
+    suspend fun getSaleById(id: String): Sale?
+    suspend fun getSaleByInvoiceNumber(invoiceNumber: String): Sale?
+    suspend fun getSales(
+        from: LocalDateTime? = null,
+        to: LocalDateTime? = null,
+        customerId: String? = null,
+        employeeId: String? = null,
+        status: SaleStatus? = null,
+        paymentStatus: PaymentStatus? = null
+    ): List<Sale>
+    suspend fun searchSales(query: String): List<Sale>
+    suspend fun saveSale(sale: Sale): Result<Sale>
+    suspend fun saveSales(sales: List<Sale>): Result<List<Sale>>
+    suspend fun updateSale(sale: Sale): Result<Sale>
+    suspend fun validateSale(sale: Sale): Result<SaleValidationResult>
+    suspend fun holdSale(sale: Sale): Result<SaleHold>
+    suspend fun resumeSale(holdId: String): Result<Sale>
+    suspend fun cancelSale(saleId: String, reason: String? = null): Result<Sale>
+    suspend fun markSaleCompleted(saleId: String): Result<Sale>
+    suspend fun markSaleRefunded(saleId: String): Result<Sale>
+    suspend fun applyDiscount(
+        saleId: String,
+        discountAmount: BigDecimal,
+        reason: String? = null
+    ): Result<Sale>
+    suspend fun getTotalSalesAmount(
+        from: LocalDateTime? = null,
+        to: LocalDateTime? = null
+    ): BigDecimal
+    suspend fun getTopSellingProducts(
+        limit: Int = 10,
+        from: LocalDateTime? = null,
+        to: LocalDateTime? = null,
+        sortDirection: SortDirection = SortDirection.DESCENDING
+    ): List<SaleProductRanking>
+    suspend fun getSalesPendingSync(): List<Sale>
+    suspend fun markSaleSynced(saleId: String): Result<Sale>
+    suspend fun deleteSale(id: String): Result<Unit>
+    suspend fun deleteSales(ids: List<String>): Result<Int>
+    suspend fun clearAll(): Result<Unit>
+    suspend fun countSales(): Long
+    suspend fun countSalesByStatus(status: SaleStatus): Long
+    suspend fun countCompletedSales(): Long
+    suspend fun countPendingSales(): Long
+}
+data class SaleValidationResult(
+    val valid: Boolean,
+    val saleId: String? = null,
+    val message: String? = null,
+    val missingStockCount: Int = 0,
+    val lowStockCount: Int = 0,
+    val totalAmount: BigDecimal = BigDecimal.ZERO
+) {
+    init {
+        require(missingStockCount >= 0) { "missingStockCount cannot be negative." }
+        require(lowStockCount >= 0) { "lowStockCount cannot be negative." }
+        require(totalAmount >= BigDecimal.ZERO) { "totalAmount cannot be negative." }
+    }
+}
+data class SaleHold(
+    val holdId: String,
+    val saleId: String,
+    val reason: String? = null,
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    val expiresAtMillis: Long? = null,
+    val metadata: Map<String, String> = emptyMap()
+) {
+    init {
+        require(holdId.isNotBlank()) { "holdId cannot be blank." }
+        require(saleId.isNotBlank()) { "saleId cannot be blank." }
+        expiresAtMillis?.let {
+            require(it > 0L) { "expiresAtMillis must be greater than zero when provided." }
+        }
+        reason?.let {
+            require(it.isNotBlank()) { "reason cannot be blank when provided." }
+        }
+    }
+}
+data class SaleProductRanking(
+    val productBarcode: String,
+    val productName: String,
+    val quantitySold: BigDecimal,
+    val revenue: BigDecimal,
+    val rank: Int
+) {
+    init {
+        require(productBarcode.isNotBlank()) { "productBarcode cannot be blank." }
+        require(productName.isNotBlank()) { "productName cannot be blank." }
+        require(quantitySold >= BigDecimal.ZERO) { "quantitySold cannot be negative." }
+        require(revenue >= BigDecimal.ZERO) { "revenue cannot be negative." }
+        require(rank > 0) { "rank must be greater than zero." }
+    }
+}
+
+------------------------------
+FILE: StockRepository.kt
+------------------------------
+package com.myimdad_por.domain.repository
+import com.myimdad_por.domain.model.StockItem
+import com.myimdad_por.domain.model.UnitOfMeasure
+import java.time.LocalDate
+import java.time.LocalDateTime
+import kotlinx.coroutines.flow.Flow
+interface StockRepository {
+    fun observeAllStock(): Flow<List<StockItem>>
+    fun observeStockByBarcode(barcode: String): Flow<StockItem?>
+    fun observeStockByLocation(location: String): Flow<List<StockItem>>
+    fun observeLowStockItems(): Flow<List<StockItem>>
+    fun observeExpiredStockItems(): Flow<List<StockItem>>
+    suspend fun getStockByBarcode(barcode: String): StockItem?
+    suspend fun getStockItems(
+        query: String? = null,
+        location: String? = null,
+        unitOfMeasure: UnitOfMeasure? = null
+    ): List<StockItem>
+    suspend fun getStockHistory(
+        barcode: String,
+        from: LocalDateTime? = null,
+        to: LocalDateTime? = null
+    ): List<StockMovement>
+    suspend fun adjustStock(
+        barcode: String,
+        quantityDelta: Double,
+        reason: String,
+        location: String? = null
+    ): Result<StockItem>
+    suspend fun transferStock(
+        barcode: String,
+        fromLocation: String,
+        toLocation: String,
+        quantity: Double,
+        reason: String? = null
+    ): Result<StockTransferResult>
+    suspend fun receiveStock(
+        barcode: String,
+        quantity: Double,
+        location: String,
+        sourceDocumentId: String? = null,
+        reason: String? = null
+    ): Result<StockItem>
+    suspend fun consumeStock(
+        barcode: String,
+        quantity: Double,
+        location: String,
+        reason: String? = null
+    ): Result<StockItem>
+    suspend fun reserveStock(
+        barcode: String,
+        quantity: Double,
+        referenceId: String? = null
+    ): Result<StockReservation>
+    suspend fun releaseReservation(reservationId: String): Result<Unit>
+    suspend fun setReorderLevel(
+        barcode: String,
+        reorderLevel: Double
+    ): Result<StockItem>
+    suspend fun setStockExpiry(
+        barcode: String,
+        expiryDate: LocalDate
+    ): Result<StockItem>
+    suspend fun clearExpiredStock(today: LocalDate = LocalDate.now()): Result<Int>
+    suspend fun deleteStockItem(barcode: String): Result<Unit>
+    suspend fun deleteStockItems(barcodes: List<String>): Result<Int>
+    suspend fun clearAll(): Result<Unit>
+    suspend fun countItems(): Long
+    suspend fun countLowStockItems(): Long
+    suspend fun countExpiredStockItems(today: LocalDate = LocalDate.now()): Long
+    suspend fun getAvailableQuantity(barcode: String): Double
+    suspend fun getTotalQuantityByLocation(location: String): Double
+}
+data class StockMovement(
+    val movementId: String,
+    val barcode: String,
+    val quantityDelta: Double,
+    val sourceLocation: String? = null,
+    val targetLocation: String? = null,
+    val reason: String? = null,
+    val referenceId: String? = null,
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    val metadata: Map<String, String> = emptyMap()
+) {
+    init {
+        require(movementId.isNotBlank()) { "movementId cannot be blank." }
+        require(barcode.isNotBlank()) { "barcode cannot be blank." }
+        require(quantityDelta.isFinite()) { "quantityDelta must be finite." }
+    }
+}
+data class StockTransferResult(
+    val transferId: String,
+    val barcode: String,
+    val fromLocation: String,
+    val toLocation: String,
+    val quantity: Double,
+    val completedAtMillis: Long = System.currentTimeMillis(),
+    val metadata: Map<String, String> = emptyMap()
+) {
+    init {
+        require(transferId.isNotBlank()) { "transferId cannot be blank." }
+        require(barcode.isNotBlank()) { "barcode cannot be blank." }
+        require(fromLocation.isNotBlank()) { "fromLocation cannot be blank." }
+        require(toLocation.isNotBlank()) { "toLocation cannot be blank." }
+        require(quantity > 0.0) { "quantity must be greater than zero." }
+    }
+}
+data class StockReservation(
+    val reservationId: String,
+    val barcode: String,
+    val quantity: Double,
+    val referenceId: String? = null,
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    val expiresAtMillis: Long? = null,
+    val metadata: Map<String, String> = emptyMap()
+) {
+    init {
+        require(reservationId.isNotBlank()) { "reservationId cannot be blank." }
+        require(barcode.isNotBlank()) { "barcode cannot be blank." }
+        require(quantity > 0.0) { "quantity must be greater than zero." }
+        expiresAtMillis?.let {
+            require(it > 0L) { "expiresAtMillis must be greater than zero when provided." }
+        }
+    }
+}
+
+------------------------------
+FILE: SubscriptionRepository.kt
+------------------------------
+package com.myimdad_por.domain.repository
+import com.myimdad_por.domain.model.SubscriptionFeature
+import com.myimdad_por.domain.model.SubscriptionInfo
+import com.myimdad_por.domain.model.SubscriptionPlan
+import com.myimdad_por.domain.model.SubscriptionStatus
+import kotlinx.coroutines.flow.Flow
+interface SubscriptionRepository {
+    fun observeSubscription(): Flow<SubscriptionInfo?>
+    fun observeSubscriptionStatus(): Flow<SubscriptionStatus?>
+    suspend fun getSubscription(): SubscriptionInfo?
+    suspend fun refreshSubscriptionFromServer(): Result<SubscriptionInfo>
+    suspend fun saveSubscription(subscriptionInfo: SubscriptionInfo): Result<SubscriptionInfo>
+    suspend fun clearSubscription(): Result<Unit>
+    suspend fun isSubscriptionActive(): Boolean
+    suspend fun isSubscriptionExpired(): Boolean
+    suspend fun isInGracePeriod(): Boolean
+    suspend fun canOperateOffline(): Boolean
+    suspend fun canUsePaidFeatures(): Boolean
+    suspend fun checkFeatureAccess(feature: SubscriptionFeature): Boolean
+    suspend fun canAccessInvoices(): Boolean
+    suspend fun canAccessReports(): Boolean
+    suspend fun isReadOnlyMode(): Boolean
+    suspend fun getAllowedPlan(): SubscriptionPlan?
+    suspend fun getRemainingUsersCount(): Int?
+    suspend fun getRemainingInvoicesCount(): Int?
+    suspend fun recordInvoiceUsage(count: Int = 1): Result<Unit>
+    suspend fun recordFeatureUsage(feature: SubscriptionFeature): Result<Unit>
+    suspend fun syncUsageWithServer(): Result<Unit>
+    suspend fun getSubscriptionStatusSummary(): SubscriptionStatusSummary
+}
+data class SubscriptionStatusSummary(
+    val subscriptionId: String? = null,
+    val plan: SubscriptionPlan? = null,
+    val status: SubscriptionStatus? = null,
+    val isActive: Boolean = false,
+    val isExpired: Boolean = false,
+    val isInGracePeriod: Boolean = false,
+    val canOperateOffline: Boolean = false,
+    val canUsePaidFeatures: Boolean = false,
+    val canAccessInvoices: Boolean = false,
+    val canAccessReports: Boolean = false,
+    val readOnlyMode: Boolean = true,
+    val remainingUsers: Int? = null,
+    val remainingInvoices: Int? = null
+) {
+    val isBlocked: Boolean
+        get() = !isActive || readOnlyMode
+}
+
+------------------------------
+FILE: DashboardRepository.kt
+------------------------------
+package com.myimdad_por.domain.repository
+import com.myimdad_por.domain.model.Dashboard
+import kotlinx.coroutines.flow.Flow
+interface DashboardRepository {
+    suspend fun getDashboard(forceRefresh: Boolean = false): Result<Dashboard>
+    suspend fun refreshDashboard(): Result<Dashboard>
+    fun observeDashboard(): Flow<Dashboard>
+    suspend fun getCachedDashboard(): Dashboard?
+    suspend fun markAlertAsRead(alertId: String): Result<Unit>
+    suspend fun dismissAlert(alertId: String): Result<Unit>
+}
+
+------------------------------
+FILE: CheckPermissionUseCase.kt
+------------------------------
+package com.myimdad_por.domain.usecase
+import com.myimdad_por.domain.model.Permission
+import com.myimdad_por.domain.model.User
+import javax.inject.Inject
+data class PermissionContext(
+    val shiftOpen: Boolean = true,
+    val registerOpen: Boolean = true,
+    val subscription: SubscriptionContext = SubscriptionContext()
+)
+data class SubscriptionContext(
+    val planName: String = "basic",
+    val maxWarehousesAllowed: Int = 1,
+    val currentWarehouseCount: Int = 1,
+    val canViewReports: Boolean = true,
+    val canUseHardware: Boolean = true,
+    val canManageMultipleBranches: Boolean = false
+) {
+    init {
+        require(maxWarehousesAllowed > 0) { "maxWarehousesAllowed must be greater than zero" }
+        require(currentWarehouseCount >= 0) { "currentWarehouseCount cannot be negative" }
+    }
+}
+data class PermissionDecision(
+    val allowed: Boolean,
+    val permission: Permission,
+    val reasons: List<String> = emptyList()
+) {
+    val isDenied: Boolean
+        get() = !allowed
+}
+class CheckPermissionUseCase @Inject constructor() {
+    operator fun invoke(
+        user: User?,
+        permission: Permission,
+        context: PermissionContext = PermissionContext()
+    ): PermissionDecision {
+        val reasons = mutableListOf<String>()
+        if (user == null) {
+            reasons += "المستخدم غير موجود"
+            return PermissionDecision(
+                allowed = false,
+                permission = permission,
+                reasons = reasons
             )
         }
-    } else {
-        LoadingContent(
-            modifier = modifier.then(semanticsModifier),
-            variant = variant,
-            size = size,
-            title = title,
-            message = message,
-            progress = progress,
-            tint = resolvedTint,
-            trackColor = resolvedTrackColor,
-            contentPadding = contentPadding
+        if (!user.isActive) {
+            reasons += "الحساب غير نشط"
+        }
+        if (!user.hasPermission(permission)) {
+            reasons += "لا يملك الصلاحية المطلوبة: ${permission.label}"
+        }
+        if (!context.subscription.canUseHardware &&
+            permission in hardwarePermissions
+        ) {
+            reasons += "الاشتراك الحالي لا يسمح باستخدام العتاد"
+        }
+        if (!context.subscription.canViewReports &&
+            permission == Permission.VIEW_REPORTS
+        ) {
+            reasons += "الاشتراك الحالي لا يسمح بعرض التقارير"
+        }
+        if (context.subscription.currentWarehouseCount > context.subscription.maxWarehousesAllowed &&
+            permission == Permission.MANAGE_INVENTORY
+        ) {
+            reasons += "تجاوزت الباقة الحالية الحد المسموح للمخازن"
+        }
+        if (!context.shiftOpen && permission in shiftRequiredPermissions) {
+            reasons += "الوردية مغلقة"
+        }
+        if (!context.registerOpen && permission in registerRequiredPermissions) {
+            reasons += "الصندوق مغلق"
+        }
+        if (permission == Permission.MANAGE_USERS && !user.role.isManager()) {
+            reasons += "إدارة المستخدمين تتطلب رتبة أعلى"
+        }
+        if (permission == Permission.MANAGE_SETTINGS && !user.role.isManager()) {
+            reasons += "إدارة الإعدادات تتطلب رتبة أعلى"
+        }
+        if (permission == Permission.VIEW_AUDIT_LOGS && !user.role.isManager()) {
+            reasons += "عرض سجل التدقيق يتطلب رتبة أعلى"
+        }
+        return PermissionDecision(
+            allowed = reasons.isEmpty(),
+            permission = permission,
+            reasons = reasons
         )
     }
-}
-@Composable
-private fun LoadingContent(
-    modifier: Modifier = Modifier,
-    variant: LoadingIndicatorVariant,
-    size: LoadingIndicatorSize,
-    title: String?,
-    message: String?,
-    progress: Float?,
-    tint: Color,
-    trackColor: Color,
-    contentPadding: PaddingValues,
-) {
-    when (variant) {
-        LoadingIndicatorVariant.Circular -> {
-            LoadingSurface(
-                modifier = modifier,
-                contentPadding = contentPadding
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    if (progress != null) {
-                        CircularProgressIndicator(
-                            progress = progress.coerceIn(0f, 1f),
-                            modifier = Modifier.size(size.indicatorSize),
-                            color = tint,
-                            trackColor = trackColor,
-                            strokeWidth = size.strokeWidth
-                        )
-                    } else {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(size.indicatorSize),
-                            color = tint,
-                            trackColor = trackColor,
-                            strokeWidth = size.strokeWidth
-                        )
-                    }
-                    if (title != null || message != null) {
-                        Spacer(modifier = Modifier.height(AppDimens.Spacing.medium))
-                        LoadingTexts(
-                            title = title,
-                            message = message,
-                            centered = true
-                        )
-                    }
-                }
+    fun canAccessAll(
+        user: User?,
+        permissions: Set<Permission>,
+        context: PermissionContext = PermissionContext()
+    ): PermissionDecision {
+        val deniedReasons = mutableListOf<String>()
+        permissions.forEach { permission ->
+            val decision = invoke(user = user, permission = permission, context = context)
+            if (decision.isDenied) {
+                deniedReasons += decision.reasons.map { "$permission: $it" }
             }
         }
-        LoadingIndicatorVariant.Linear -> {
-            LoadingSurface(
-                modifier = modifier.fillMaxWidth(),
-                contentPadding = contentPadding
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    if (title != null || message != null) {
-                        LoadingTexts(
-                            title = title,
-                            message = message,
-                            centered = false
-                        )
-                        Spacer(modifier = Modifier.height(AppDimens.Spacing.medium))
-                    }
-                    if (progress != null) {
-                        LinearProgressIndicator(
-                            progress = progress.coerceIn(0f, 1f),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp),
-                            color = tint,
-                            trackColor = trackColor
-                        )
-                    } else {
-                        LinearProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp),
-                            color = tint,
-                            trackColor = trackColor
-                        )
-                    }
-                }
-            }
-        }
-        LoadingIndicatorVariant.Dots -> {
-            LoadingSurface(
-                modifier = modifier,
-                contentPadding = contentPadding
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    DotsLoadingIndicator(tint = tint)
-                    if (title != null || message != null) {
-                        Spacer(modifier = Modifier.height(AppDimens.Spacing.medium))
-                        LoadingTexts(
-                            title = title,
-                            message = message,
-                            centered = true
-                        )
-                    }
-                }
-            }
-        }
+        return PermissionDecision(
+            allowed = deniedReasons.isEmpty(),
+            permission = permissions.firstOrNull() ?: Permission.VIEW_DASHBOARD,
+            reasons = deniedReasons
+        )
     }
+    private val shiftRequiredPermissions = setOf(
+        Permission.MANAGE_SALES,
+        Permission.MANAGE_PURCHASES,
+        Permission.MANAGE_RETURNS,
+        Permission.MANAGE_EXPENSES,
+        Permission.MANAGE_PAYMENTS,
+        Permission.PROCESS_REFUND,
+        Permission.APPROVE_PAYMENT
+    )
+    private val registerRequiredPermissions = setOf(
+        Permission.MANAGE_SALES,
+        Permission.MANAGE_PAYMENTS,
+        Permission.PROCESS_REFUND,
+        Permission.APPROVE_PAYMENT
+    )
+    private val hardwarePermissions = setOf(
+        Permission.ACCESS_HARDWARE,
+        Permission.MANAGE_PRINTER,
+        Permission.MANAGE_SCANNER
+    )
 }
-@Composable
-private fun LoadingSurface(
-    modifier: Modifier = Modifier,
-    contentPadding: PaddingValues,
-    content: @Composable () -> Unit
+
+------------------------------
+FILE: GetExpensesUseCase.kt
+------------------------------
+package com.myimdad_por.domain.usecase
+import com.myimdad_por.domain.model.Expense
+import com.myimdad_por.domain.model.ExpenseCategory
+import com.myimdad_por.domain.model.ExpenseStatus
+import com.myimdad_por.domain.model.PaymentMethod
+import com.myimdad_por.domain.repository.ExpenseRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import java.math.BigDecimal
+import java.time.LocalDateTime
+import javax.inject.Inject
+data class ExpenseQuery(
+    val from: LocalDateTime? = null,
+    val to: LocalDateTime? = null,
+    val category: ExpenseCategory? = null,
+    val status: ExpenseStatus? = null,
+    val employeeId: String? = null,
+    val supplierName: String? = null,
+    val paymentMethod: PaymentMethod? = null,
+    val pendingOnly: Boolean = false,
+    val text: String? = null
+)
+class GetExpensesUseCase @Inject constructor(
+    private val expenseRepository: ExpenseRepository
 ) {
-    Surface(
-        modifier = modifier.wrapContentHeight(),
-        shape = AppShapeTokens.dialog,
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 4.dp
-    ) {
-        Box(
-            modifier = Modifier.padding(contentPadding),
-            contentAlignment = Alignment.Center
+    suspend operator fun invoke(query: ExpenseQuery = ExpenseQuery()): List<Expense> {
+        val effectiveStatus = when {
+            query.pendingOnly && query.status == null -> ExpenseStatus.PENDING
+            else -> query.status
+        }
+        val base = if (query.from == null &&
+            query.to == null &&
+            query.category == null &&
+            effectiveStatus == null &&
+            query.employeeId == null &&
+            query.supplierName == null &&
+            query.paymentMethod == null &&
+            query.text.isNullOrBlank() &&
+            !query.pendingOnly
         ) {
-            content()
-        }
-    }
-}
-@Composable
-private fun LoadingTexts(
-    title: String?,
-    message: String?,
-    centered: Boolean
-) {
-    val horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start
-    Column(horizontalAlignment = horizontalAlignment) {
-        if (title != null) {
-            Text(
-                text = title,
-                style = AppTypography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface
+            expenseRepository.observeAllExpenses().first()
+        } else {
+            expenseRepository.getExpenses(
+                from = query.from,
+                to = query.to,
+                category = query.category,
+                status = effectiveStatus,
+                employeeId = query.employeeId,
+                supplierName = query.supplierName
             )
         }
-        if (message != null) {
-            if (title != null) {
-                Spacer(modifier = Modifier.height(AppDimens.Spacing.extraSmall))
+        return base
+            .filter { query.paymentMethod == null || it.paymentMethod == query.paymentMethod }
+            .filter { query.text.isNullOrBlank() || matchesText(it, query.text) }
+    }
+    fun observeAll(): Flow<List<Expense>> = expenseRepository.observeAllExpenses()
+    fun observeByCategory(category: ExpenseCategory): Flow<List<Expense>> =
+        expenseRepository.observeExpensesByCategory(category)
+    fun observeByStatus(status: ExpenseStatus): Flow<List<Expense>> =
+        expenseRepository.observeExpensesByStatus(status)
+    fun observePending(): Flow<List<Expense>> = expenseRepository.observePendingExpenses()
+    fun observeByEmployee(employeeId: String): Flow<List<Expense>> {
+        require(employeeId.isNotBlank()) { "employeeId cannot be blank" }
+        return expenseRepository.observeExpensesByEmployee(employeeId)
+    }
+    suspend fun getById(id: String): Expense? {
+        require(id.isNotBlank()) { "id cannot be blank" }
+        return expenseRepository.getExpenseById(id)
+    }
+    suspend fun getByNumber(expenseNumber: String): Expense? {
+        require(expenseNumber.isNotBlank()) { "expenseNumber cannot be blank" }
+        return expenseRepository.getExpenseByNumber(expenseNumber)
+    }
+    suspend fun search(query: String): List<Expense> {
+        require(query.isNotBlank()) { "query cannot be blank" }
+        return expenseRepository.searchExpenses(query)
+    }
+    suspend fun getByPaymentMethod(paymentMethod: PaymentMethod): List<Expense> {
+        return expenseRepository.getExpensesByPaymentMethod(paymentMethod)
+    }
+    suspend fun countAll(): Long = expenseRepository.countExpenses()
+    suspend fun countByCategory(category: ExpenseCategory): Long =
+        expenseRepository.countExpensesByCategory(category)
+    suspend fun countPending(): Long = expenseRepository.countPendingExpenses()
+    suspend fun total(query: ExpenseQuery = ExpenseQuery()): BigDecimal {
+        return expenseRepository.getTotalExpenses(
+            from = query.from,
+            to = query.to,
+            category = query.category,
+            status = if (query.pendingOnly && query.status == null) ExpenseStatus.PENDING else query.status,
+            employeeId = query.employeeId
+        )
+    }
+    suspend fun totalPaid(query: ExpenseQuery = ExpenseQuery()): BigDecimal {
+        return expenseRepository.getTotalPaidExpenses(
+            from = query.from,
+            to = query.to,
+            category = query.category
+        )
+    }
+    suspend fun budgetUsage(
+        category: ExpenseCategory,
+        budgetAmount: BigDecimal,
+        from: LocalDateTime? = null,
+        to: LocalDateTime? = null
+    ) = expenseRepository.getBudgetUsage(category, budgetAmount, from, to)
+    suspend fun isBudgetExceeded(
+        category: ExpenseCategory,
+        budgetAmount: BigDecimal,
+        from: LocalDateTime? = null,
+        to: LocalDateTime? = null
+    ): Boolean = expenseRepository.isBudgetExceeded(category, budgetAmount, from, to)
+    private fun matchesText(expense: Expense, text: String): Boolean {
+        val q = text.trim()
+        return expense.id.contains(q, ignoreCase = true) ||
+            expense.expenseNumber.contains(q, ignoreCase = true) ||
+            expense.title.contains(q, ignoreCase = true) ||
+            expense.supplierName?.contains(q, ignoreCase = true) == true ||
+            expense.note?.contains(q, ignoreCase = true) == true
+    }
+}
+
+------------------------------
+FILE: GetInventoryUseCase.kt
+------------------------------
+package com.myimdad_por.domain.usecase
+import com.myimdad_por.domain.model.StockItem
+import com.myimdad_por.domain.model.UnitOfMeasure
+import com.myimdad_por.domain.repository.StockRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import javax.inject.Inject
+data class InventoryQuery(
+    val query: String? = null,
+    val location: String? = null,
+    val unitOfMeasure: UnitOfMeasure? = null,
+    val barcode: String? = null,
+    val lowStockOnly: Boolean = false,
+    val expiredOnly: Boolean = false,
+    val includeOutOfStock: Boolean = true
+)
+data class InventorySnapshot(
+    val items: List<StockItem>,
+    val totalItems: Int,
+    val totalQuantityByLocation: Double? = null
+)
+class GetInventoryUseCase @Inject constructor(
+    private val stockRepository: StockRepository
+) {
+    suspend operator fun invoke(query: InventoryQuery = InventoryQuery()): List<StockItem> {
+        query.barcode?.trim()?.takeIf { it.isNotBlank() }?.let {
+            return listOfNotNull(stockRepository.getStockByBarcode(it))
+                .filterByFlags(query)
+        }
+        var items = stockRepository.getStockItems(
+            query = query.query,
+            location = query.location,
+            unitOfMeasure = query.unitOfMeasure
+        )
+        if (query.lowStockOnly) {
+            val lowStockBarcodes = stockRepository.observeLowStockItems().first()
+                .map { it.normalizedBarcode }
+                .toSet()
+            items = items.filter { it.normalizedBarcode in lowStockBarcodes }
+        }
+        if (query.expiredOnly) {
+            val today = java.time.LocalDate.now()
+            items = items.filter { it.isExpired(today) }
+        }
+        if (!query.includeOutOfStock) {
+            items = items.filter { !it.isOutOfStock }
+        }
+        return items
+    }
+    fun observeAll(): Flow<List<StockItem>> = stockRepository.observeAllStock()
+    fun observeByBarcode(barcode: String): Flow<StockItem?> {
+        require(barcode.isNotBlank()) { "barcode cannot be blank" }
+        return stockRepository.observeStockByBarcode(barcode)
+    }
+    fun observeByLocation(location: String): Flow<List<StockItem>> {
+        require(location.isNotBlank()) { "location cannot be blank" }
+        return stockRepository.observeStockByLocation(location)
+    }
+    fun observeLowStock(): Flow<List<StockItem>> = stockRepository.observeLowStockItems()
+    fun observeExpired(): Flow<List<StockItem>> = stockRepository.observeExpiredStockItems()
+    suspend fun getByBarcode(barcode: String): StockItem? {
+        require(barcode.isNotBlank()) { "barcode cannot be blank" }
+        return stockRepository.getStockByBarcode(barcode)
+    }
+    suspend fun countItems(): Long = stockRepository.countItems()
+    suspend fun countLowStockItems(): Long = stockRepository.countLowStockItems()
+    suspend fun countExpiredItems(today: java.time.LocalDate = java.time.LocalDate.now()): Long {
+        return stockRepository.countExpiredStockItems(today)
+    }
+    suspend fun getAvailableQuantity(barcode: String): Double {
+        require(barcode.isNotBlank()) { "barcode cannot be blank" }
+        return stockRepository.getAvailableQuantity(barcode)
+    }
+    suspend fun getTotalQuantityByLocation(location: String): Double {
+        require(location.isNotBlank()) { "location cannot be blank" }
+        return stockRepository.getTotalQuantityByLocation(location)
+    }
+    private fun List<StockItem>.filterByFlags(query: InventoryQuery): List<StockItem> {
+        val today = java.time.LocalDate.now()
+        return asSequence()
+            .filter { query.includeOutOfStock || !it.isOutOfStock }
+            .filter { !query.expiredOnly || it.isExpired(today) }
+            .toList()
+    }
+}
+
+------------------------------
+FILE: GetSubscriptionStatusUseCase.kt
+------------------------------
+package com.myimdad_por.domain.usecase.subscription
+import com.myimdad_por.domain.model.SubscriptionInfo
+import com.myimdad_por.domain.model.SubscriptionPlan
+import com.myimdad_por.domain.model.SubscriptionStatus
+import com.myimdad_por.domain.repository.SubscriptionRepository
+import com.myimdad_por.domain.repository.SubscriptionStatusSummary
+import javax.inject.Inject
+data class GetSubscriptionStatusRequest(
+    val refreshFromServer: Boolean = false,
+    val includeRawSubscription: Boolean = true
+)
+data class GetSubscriptionStatusResult(
+    val summary: SubscriptionStatusSummary,
+    val subscription: SubscriptionInfo? = null
+) {
+    val isActive: Boolean
+        get() = summary.isActive
+    val isExpired: Boolean
+        get() = summary.isExpired
+    val isInGracePeriod: Boolean
+        get() = summary.isInGracePeriod
+    val canOperateOffline: Boolean
+        get() = summary.canOperateOffline
+    val canUsePaidFeatures: Boolean
+        get() = summary.canUsePaidFeatures
+    val isBlocked: Boolean
+        get() = summary.isBlocked
+    val plan: SubscriptionPlan?
+        get() = summary.plan
+    val status: SubscriptionStatus?
+        get() = summary.status
+}
+class GetSubscriptionStatusUseCase @Inject constructor(
+    private val subscriptionRepository: SubscriptionRepository
+) {
+    suspend operator fun invoke(
+        request: GetSubscriptionStatusRequest = GetSubscriptionStatusRequest()
+    ): Result<GetSubscriptionStatusResult> {
+        return runCatching {
+            if (request.refreshFromServer) {
+                subscriptionRepository.refreshSubscriptionFromServer().getOrThrow()
             }
-            Text(
-                text = message,
-                style = AppTypography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            val summary = subscriptionRepository.getSubscriptionStatusSummary()
+            val subscription = if (request.includeRawSubscription) {
+                subscriptionRepository.getSubscription()
+            } else {
+                null
+            }
+            GetSubscriptionStatusResult(
+                summary = summary,
+                subscription = subscription
             )
         }
     }
 }
-@Composable
-private fun DotsLoadingIndicator(
-    tint: Color
-) {
-    val transition = rememberInfiniteTransition(label = "dots_loading")
-    val dot1 by transition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 600),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "dot1"
-    )
-    val dot2 by transition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 600, delayMillis = 150),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "dot2"
-    )
-    val dot3 by transition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 600, delayMillis = 300),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "dot3"
-    )
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Dot(tint = tint, alpha = dot1)
-        Dot(tint = tint, alpha = dot2)
-        Dot(tint = tint, alpha = dot3)
-    }
-}
-@Composable
-private fun Dot(
-    tint: Color,
-    alpha: Float
-) {
-    Box(
-        modifier = Modifier
-            .size(8.dp)
-            .background(
-                color = tint.copy(alpha = alpha),
-                shape = RoundedCornerShape(50)
+
+------------------------------
+FILE: GetAnalyticsData.kt
+------------------------------
+package com.myimdad_por.domain.usecase.dashboard
+import com.myimdad_por.domain.model.Dashboard
+import com.myimdad_por.domain.model.DashboardAlert
+import com.myimdad_por.domain.model.DashboardAlertLevel
+import com.myimdad_por.domain.model.DashboardMetric
+import java.math.BigDecimal
+import java.math.RoundingMode
+import javax.inject.Inject
+class GetAnalyticsData @Inject constructor() {
+    operator fun invoke(dashboard: Dashboard?): AnalyticsData {
+        if (dashboard == null) {
+            return AnalyticsData()
+        }
+        val metrics = buildMetrics(dashboard)
+        val alerts = dashboard.alerts
+        val summary = buildSummary(dashboard, metrics, alerts)
+        return AnalyticsData(
+            summary = summary,
+            metrics = metrics,
+            alerts = alerts,
+            kpis = metrics.take(6),
+            riskAlerts = alerts.filter { it.level != DashboardAlertLevel.Info },
+            salesTrend = buildTrendSeries(
+                current = dashboard.sales.todayRevenue,
+                monthly = dashboard.sales.monthRevenue,
+                positiveLabel = "إيرادات",
+                negativeLabel = "انخفاض"
+            ),
+            inventoryTrend = buildTrendSeries(
+                current = dashboard.inventory.productsCount.toBigDecimal(),
+                monthly = dashboard.inventory.lowStockCount.toBigDecimal(),
+                positiveLabel = "متاح",
+                negativeLabel = "منخفض"
+            ),
+            customerTrend = buildTrendSeries(
+                current = dashboard.customers.customersCount.toBigDecimal(),
+                monthly = dashboard.customers.newCustomersCount.toBigDecimal(),
+                positiveLabel = "عملاء",
+                negativeLabel = "جدد"
             )
-    )
-}
-@Composable
-fun LoadingOverlay(
-    modifier: Modifier = Modifier,
-    visible: Boolean,
-    title: String? = null,
-    message: String? = null,
-    variant: LoadingIndicatorVariant = LoadingIndicatorVariant.Circular,
-    size: LoadingIndicatorSize = LoadingIndicatorSize.Medium,
-    tint: Color? = null,
-    trackColor: Color? = null,
-    content: @Composable BoxScope.() -> Unit
-) {
-    val resolvedTint = tint ?: MaterialTheme.colorScheme.primary
-    val resolvedTrackColor = trackColor ?: resolvedTint.copy(alpha = 0.16f)
-    Box(modifier = modifier.fillMaxSize()) {
-        content()
-        if (visible) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)),
-                contentAlignment = Alignment.Center
-            ) {
-                LoadingIndicator(
-                    variant = variant,
-                    size = size,
-                    title = title,
-                    message = message,
-                    tint = resolvedTint,
-                    trackColor = resolvedTrackColor,
-                    centered = true
+        )
+    }
+    private fun buildSummary(
+        dashboard: Dashboard,
+        metrics: List<DashboardMetric>,
+        alerts: List<DashboardAlert>
+    ): AnalyticsSummary {
+        val totalPositive = metrics.count { it.isPositiveTrend }
+        val totalNegative = metrics.count { !it.isPositiveTrend }
+        val highPriorityAlerts = alerts.count {
+            it.level == DashboardAlertLevel.Warning || it.level == DashboardAlertLevel.Critical
+        }
+        return AnalyticsSummary(
+            title = dashboard.overview.title,
+            subtitle = dashboard.overview.subtitle,
+            totalMetrics = metrics.size,
+            positiveMetrics = totalPositive,
+            negativeMetrics = totalNegative,
+            totalAlerts = alerts.size,
+            criticalAlerts = highPriorityAlerts,
+            hasSalesGrowth = dashboard.sales.growthRatePercent?.let { it > BigDecimal.ZERO } == true,
+            hasStockRisk = dashboard.inventory.hasStockRisk,
+            hasProfitData = dashboard.financial.hasProfitData,
+            currencyCode = dashboard.financial.currencyCode
+        )
+    }
+    private fun buildMetrics(dashboard: Dashboard): List<DashboardMetric> {
+        return buildList {
+            add(
+                DashboardMetric(
+                    key = "today_sales_count",
+                    label = "مبيعات اليوم",
+                    value = dashboard.sales.todaySalesCount.toBigDecimal(),
+                    formattedValue = dashboard.sales.todaySalesCount.toString(),
+                    deltaPercent = dashboard.sales.growthRatePercent,
+                    deltaLabel = dashboard.sales.growthRatePercent?.let { "نمو" },
+                    isPositiveTrend = (dashboard.sales.growthRatePercent ?: BigDecimal.ZERO) >= BigDecimal.ZERO,
+                    accentKey = "sales"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "today_revenue",
+                    label = "إيراد اليوم",
+                    value = dashboard.sales.todayRevenue.money(),
+                    formattedValue = dashboard.sales.todayRevenue.money().toPlainString(),
+                    isPositiveTrend = true,
+                    accentKey = "revenue"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "month_revenue",
+                    label = "إيراد الشهر",
+                    value = dashboard.sales.monthRevenue.money(),
+                    formattedValue = dashboard.sales.monthRevenue.money().toPlainString(),
+                    deltaPercent = dashboard.sales.growthRatePercent,
+                    deltaLabel = dashboard.sales.growthRatePercent?.let { "مقارنة بالشهر السابق" },
+                    isPositiveTrend = (dashboard.sales.growthRatePercent ?: BigDecimal.ZERO) >= BigDecimal.ZERO,
+                    accentKey = "month_revenue"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "pending_invoices",
+                    label = "فواتير معلقة",
+                    value = dashboard.sales.pendingInvoicesCount.toBigDecimal(),
+                    formattedValue = dashboard.sales.pendingInvoicesCount.toString(),
+                    isPositiveTrend = false,
+                    accentKey = "pending"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "low_stock_count",
+                    label = "منخفض المخزون",
+                    value = dashboard.inventory.lowStockCount.toBigDecimal(),
+                    formattedValue = dashboard.inventory.lowStockCount.toString(),
+                    isPositiveTrend = false,
+                    accentKey = "low_stock"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "out_of_stock_count",
+                    label = "نفد المخزون",
+                    value = dashboard.inventory.outOfStockCount.toBigDecimal(),
+                    formattedValue = dashboard.inventory.outOfStockCount.toString(),
+                    isPositiveTrend = false,
+                    accentKey = "out_of_stock"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "customers_count",
+                    label = "العملاء",
+                    value = dashboard.customers.customersCount.toBigDecimal(),
+                    formattedValue = dashboard.customers.customersCount.toString(),
+                    isPositiveTrend = true,
+                    accentKey = "customers"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "net_balance",
+                    label = "صافي الرصيد",
+                    value = dashboard.financial.netBalance.money(),
+                    formattedValue = dashboard.financial.netBalance.money().toPlainString(),
+                    isPositiveTrend = dashboard.financial.netBalance >= BigDecimal.ZERO,
+                    accentKey = "finance"
+                )
+            )
+            dashboard.financial.profitEstimate?.let { profit ->
+                add(
+                    DashboardMetric(
+                        key = "profit_estimate",
+                        label = "الربح التقديري",
+                        value = profit.money(),
+                        formattedValue = profit.money().toPlainString(),
+                        isPositiveTrend = profit >= BigDecimal.ZERO,
+                        accentKey = "profit"
+                    )
                 )
             }
         }
     }
+    private fun buildTrendSeries(
+        current: BigDecimal,
+        monthly: BigDecimal,
+        positiveLabel: String,
+        negativeLabel: String
+    ): AnalyticsTrend {
+        val safeCurrent = current.money()
+        val safeMonthly = monthly.money()
+        val changePercent = if (safeMonthly > BigDecimal.ZERO) {
+            ((safeCurrent - safeMonthly) / safeMonthly * BigDecimal(100))
+                .setScale(2, RoundingMode.HALF_UP)
+        } else {
+            BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+        }
+        return AnalyticsTrend(
+            current = safeCurrent,
+            reference = safeMonthly,
+            changePercent = changePercent,
+            label = when {
+                changePercent > BigDecimal.ZERO -> positiveLabel
+                changePercent < BigDecimal.ZERO -> negativeLabel
+                else -> "ثابت"
+            },
+            isPositive = changePercent >= BigDecimal.ZERO
+        )
+    }
 }
-@Composable
-fun LoadingInline(
-    modifier: Modifier = Modifier,
-    text: String = "جاري التحميل",
-    tint: Color? = null
+data class AnalyticsData(
+    val summary: AnalyticsSummary = AnalyticsSummary(),
+    val metrics: List<DashboardMetric> = emptyList(),
+    val kpis: List<DashboardMetric> = emptyList(),
+    val alerts: List<DashboardAlert> = emptyList(),
+    val riskAlerts: List<DashboardAlert> = emptyList(),
+    val salesTrend: AnalyticsTrend = AnalyticsTrend(),
+    val inventoryTrend: AnalyticsTrend = AnalyticsTrend(),
+    val customerTrend: AnalyticsTrend = AnalyticsTrend()
 ) {
-    val resolvedTint = tint ?: MaterialTheme.colorScheme.primary
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        CircularProgressIndicator(
-            modifier = Modifier.size(18.dp),
-            color = resolvedTint,
-            strokeWidth = 2.dp
+    val hasData: Boolean
+        get() = metrics.isNotEmpty() || alerts.isNotEmpty()
+}
+data class AnalyticsSummary(
+    val title: String = "لوحة التحليلات",
+    val subtitle: String? = null,
+    val totalMetrics: Int = 0,
+    val positiveMetrics: Int = 0,
+    val negativeMetrics: Int = 0,
+    val totalAlerts: Int = 0,
+    val criticalAlerts: Int = 0,
+    val hasSalesGrowth: Boolean = false,
+    val hasStockRisk: Boolean = false,
+    val hasProfitData: Boolean = false,
+    val currencyCode: String = "SDG"
+)
+data class AnalyticsTrend(
+    val current: BigDecimal = BigDecimal.ZERO,
+    val reference: BigDecimal = BigDecimal.ZERO,
+    val changePercent: BigDecimal = BigDecimal.ZERO,
+    val label: String = "ثابت",
+    val isPositive: Boolean = true
+)
+private fun Int.toBigDecimal(): BigDecimal = BigDecimal.valueOf(toLong())
+private fun BigDecimal.money(): BigDecimal = setScale(2, RoundingMode.HALF_UP)
+
+------------------------------
+FILE: ManageDashboardWidgets.kt
+------------------------------
+package com.myimdad_por.domain.usecase.dashboard
+import com.myimdad_por.domain.model.Dashboard
+import com.myimdad_por.domain.model.DashboardQuickAction
+import com.myimdad_por.domain.model.DashboardAlertLevel
+class ManageDashboardWidgets {
+    operator fun invoke(
+        dashboard: Dashboard?,
+        config: DashboardWidgetConfig = DashboardWidgetConfig()
+    ): DashboardWidgetsState {
+        if (dashboard == null) {
+            return DashboardWidgetsState(
+                visibleWidgets = emptyList(),
+                pinnedWidgets = emptyList(),
+                hiddenWidgets = emptyList(),
+                recommendedWidgets = defaultRecommendations(emptyList(), config),
+                totalWidgets = 0,
+                hasCriticalWidgets = false,
+                hasPinnedWidgets = false
+            )
+        }
+        val allWidgets = buildWidgets(dashboard, config)
+        val filteredWidgets = allWidgets
+            .filter { widget ->
+                config.allowedWidgetIds.isNullOrEmpty() || widget.id in config.allowedWidgetIds
+            }
+            .filter { widget ->
+                !config.onlyEnabledWidgets || widget.isEnabled
+            }
+            .filter { widget ->
+                !config.hideEmptyWidgets || !widget.isEmpty()
+            }
+        val pinned = filteredWidgets
+            .filter { it.isPinned }
+            .sortedWith(widgetComparator(config))
+        val visible = filteredWidgets
+            .filterNot { it.isPinned }
+            .sortedWith(widgetComparator(config))
+            .let { list ->
+                if (config.maxVisibleWidgets != null) list.take(config.maxVisibleWidgets) else list
+            }
+        val visibleCombined = (pinned + visible).distinctBy { it.id }
+        val hidden = allWidgets.filterNot { widget -> visibleCombined.any { it.id == widget.id } }
+        val recommendations = defaultRecommendations(allWidgets, config)
+            .filterNot { recommended -> visibleCombined.any { it.id == recommended.id } }
+            .take(config.maxRecommendations)
+        return DashboardWidgetsState(
+            visibleWidgets = visibleCombined,
+            pinnedWidgets = pinned,
+            hiddenWidgets = hidden,
+            recommendedWidgets = recommendations,
+            totalWidgets = allWidgets.size,
+            hasCriticalWidgets = allWidgets.any { it.priority >= DashboardWidgetPriority.Critical },
+            hasPinnedWidgets = pinned.isNotEmpty(),
+            summary = buildSummary(dashboard, allWidgets, visibleCombined)
         )
-        Spacer(modifier = Modifier.width(AppDimens.Spacing.small))
-        Text(
-            text = text,
-            style = AppTypography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    private fun buildWidgets(
+        dashboard: Dashboard,
+        config: DashboardWidgetConfig
+    ): List<DashboardWidget> {
+        val widgets = buildList {
+            add(
+                DashboardWidget(
+                    id = "overview",
+                    title = dashboard.overview.title,
+                    description = dashboard.overview.subtitle ?: "ملخص عام للوضع الحالي",
+                    type = DashboardWidgetType.Overview,
+                    priority = DashboardWidgetPriority.High,
+                    isEnabled = dashboard.overview.totalMetrics > 0,
+                    isPinned = config.pinnedWidgetIds.contains("overview"),
+                    accentKey = "overview"
+                )
+            )
+            add(
+                DashboardWidget(
+                    id = "sales_today",
+                    title = "مبيعات اليوم",
+                    description = "عدد المبيعات والإيراد اليومي",
+                    type = DashboardWidgetType.Sales,
+                    priority = DashboardWidgetPriority.Critical,
+                    isEnabled = dashboard.sales.todaySalesCount > 0 || dashboard.sales.todayRevenue > java.math.BigDecimal.ZERO,
+                    isPinned = config.pinnedWidgetIds.contains("sales_today"),
+                    valueLabel = dashboard.sales.todaySalesCount.toString(),
+                    accentKey = "sales"
+                )
+            )
+            add(
+                DashboardWidget(
+                    id = "sales_month",
+                    title = "أداء الشهر",
+                    description = "الإيراد الشهري واتجاه النمو",
+                    type = DashboardWidgetType.Trend,
+                    priority = DashboardWidgetPriority.High,
+                    isEnabled = dashboard.sales.monthRevenue > java.math.BigDecimal.ZERO,
+                    isPinned = config.pinnedWidgetIds.contains("sales_month"),
+                    accentKey = "month_revenue"
+                )
+            )
+            add(
+                DashboardWidget(
+                    id = "inventory",
+                    title = "المخزون",
+                    description = "المنتجات والتنبيهات المرتبطة بالمخزون",
+                    type = DashboardWidgetType.Inventory,
+                    priority = if (dashboard.inventory.hasStockRisk) DashboardWidgetPriority.Critical else DashboardWidgetPriority.High,
+                    isEnabled = dashboard.inventory.productsCount > 0,
+                    isPinned = config.pinnedWidgetIds.contains("inventory"),
+                    accentKey = "inventory"
+                )
+            )
+            add(
+                DashboardWidget(
+                    id = "customers",
+                    title = "العملاء",
+                    description = "إجمالي العملاء والجدد والنشطين",
+                    type = DashboardWidgetType.Customers,
+                    priority = DashboardWidgetPriority.Normal,
+                    isEnabled = dashboard.customers.customersCount > 0,
+                    isPinned = config.pinnedWidgetIds.contains("customers"),
+                    accentKey = "customers"
+                )
+            )
+            add(
+                DashboardWidget(
+                    id = "financial",
+                    title = "المالية",
+                    description = "صافي الرصيد والذمم والربح التقديري",
+                    type = DashboardWidgetType.Financial,
+                    priority = DashboardWidgetPriority.Critical,
+                    isEnabled = true,
+                    isPinned = config.pinnedWidgetIds.contains("financial"),
+                    accentKey = "finance"
+                )
+            )
+            add(
+                DashboardWidget(
+                    id = "alerts",
+                    title = "التنبيهات",
+                    description = "التنبيهات الحرجة والمهمة",
+                    type = DashboardWidgetType.Alerts,
+                    priority = when {
+                        dashboard.alerts.any { it.level == DashboardAlertLevel.Critical } -> DashboardWidgetPriority.Critical
+                        dashboard.alerts.any { it.level == DashboardAlertLevel.Warning } -> DashboardWidgetPriority.High
+                        else -> DashboardWidgetPriority.Normal
+                    },
+                    isEnabled = dashboard.alerts.isNotEmpty(),
+                    isPinned = config.pinnedWidgetIds.contains("alerts"),
+                    accentKey = "alerts"
+                )
+            )
+            add(
+                DashboardWidget(
+                    id = "quick_actions",
+                    title = "إجراءات سريعة",
+                    description = "الاختصارات الأكثر استخدامًا",
+                    type = DashboardWidgetType.QuickActions,
+                    priority = DashboardWidgetPriority.Normal,
+                    isEnabled = dashboard.quickActions.isNotEmpty(),
+                    isPinned = config.pinnedWidgetIds.contains("quick_actions"),
+                    accentKey = "actions"
+                )
+            )
+            dashboard.sales.topSellingProductName?.let { topProduct ->
+                add(
+                    DashboardWidget(
+                        id = "top_product",
+                        title = "الأكثر مبيعًا",
+                        description = topProduct,
+                        type = DashboardWidgetType.Highlight,
+                        priority = DashboardWidgetPriority.Normal,
+                        isEnabled = true,
+                        isPinned = config.pinnedWidgetIds.contains("top_product"),
+                        accentKey = "top_product"
+                    )
+                )
+            }
+            dashboard.customers.topCustomerName?.let { topCustomer ->
+                add(
+                    DashboardWidget(
+                        id = "top_customer",
+                        title = "أفضل عميل",
+                        description = topCustomer,
+                        type = DashboardWidgetType.Highlight,
+                        priority = DashboardWidgetPriority.Normal,
+                        isEnabled = true,
+                        isPinned = config.pinnedWidgetIds.contains("top_customer"),
+                        accentKey = "top_customer"
+                    )
+                )
+            }
+            dashboard.inventory.mostCriticalProductName?.let { criticalProduct ->
+                add(
+                    DashboardWidget(
+                        id = "critical_stock",
+                        title = "أخطر صنف",
+                        description = criticalProduct,
+                        type = DashboardWidgetType.Risk,
+                        priority = DashboardWidgetPriority.Critical,
+                        isEnabled = dashboard.inventory.hasStockRisk,
+                        isPinned = config.pinnedWidgetIds.contains("critical_stock"),
+                        accentKey = "critical_stock"
+                    )
+                )
+            }
+        }
+        return if (config.searchQuery.isNullOrBlank()) {
+            widgets
+        } else {
+            widgets.filter { widget ->
+                widget.title.contains(config.searchQuery, ignoreCase = true) ||
+                    (widget.description?.contains(config.searchQuery, ignoreCase = true) == true)
+            }
+        }
+    }
+    private fun defaultRecommendations(
+        widgets: List<DashboardWidget>,
+        config: DashboardWidgetConfig
+    ): List<DashboardWidget> {
+        return widgets
+            .filter { widget -> widget.isEnabled }
+            .filter { widget -> config.allowedWidgetIds.isNullOrEmpty() || widget.id in config.allowedWidgetIds }
+            .sortedWith(
+                compareByDescending<DashboardWidget> { it.isPinned }
+                    .thenByDescending { it.priority.rank }
+                    .thenBy { it.title }
+            )
+    }
+    private fun widgetComparator(config: DashboardWidgetConfig): Comparator<DashboardWidget> {
+        return compareByDescending<DashboardWidget> { it.isPinned }
+            .thenByDescending { it.priority.rank }
+            .thenBy { it.title }
+            .let { comparator ->
+                if (config.compactMode) {
+                    comparator.thenByDescending { it.type.compactWeight }
+                } else {
+                    comparator
+                }
+            }
+    }
+    private fun buildSummary(
+        dashboard: Dashboard,
+        allWidgets: List<DashboardWidget>,
+        visibleWidgets: List<DashboardWidget>
+    ): DashboardWidgetsSummary {
+        return DashboardWidgetsSummary(
+            title = dashboard.overview.title,
+            subtitle = dashboard.overview.subtitle,
+            totalMetrics = dashboard.overview.totalMetrics,
+            visibleWidgetsCount = visibleWidgets.size,
+            hiddenWidgetsCount = (allWidgets.size - visibleWidgets.size).coerceAtLeast(0),
+            criticalWidgetsCount = allWidgets.count { it.priority == DashboardWidgetPriority.Critical },
+            enabledWidgetsCount = allWidgets.count { it.isEnabled },
+            disabledWidgetsCount = allWidgets.count { !it.isEnabled }
         )
+    }
+}
+data class DashboardWidgetConfig(
+    val allowedWidgetIds: Set<String>? = null,
+    val pinnedWidgetIds: Set<String> = emptySet(),
+    val searchQuery: String? = null,
+    val hideEmptyWidgets: Boolean = true,
+    val onlyEnabledWidgets: Boolean = true,
+    val maxVisibleWidgets: Int? = null,
+    val maxRecommendations: Int = 3,
+    val compactMode: Boolean = false
+)
+data class DashboardWidgetsState(
+    val visibleWidgets: List<DashboardWidget> = emptyList(),
+    val pinnedWidgets: List<DashboardWidget> = emptyList(),
+    val hiddenWidgets: List<DashboardWidget> = emptyList(),
+    val recommendedWidgets: List<DashboardWidget> = emptyList(),
+    val totalWidgets: Int = 0,
+    val hasCriticalWidgets: Boolean = false,
+    val hasPinnedWidgets: Boolean = false,
+    val summary: DashboardWidgetsSummary = DashboardWidgetsSummary()
+)
+data class DashboardWidgetsSummary(
+    val title: String = "لوحة القطع",
+    val subtitle: String? = null,
+    val totalMetrics: Int = 0,
+    val visibleWidgetsCount: Int = 0,
+    val hiddenWidgetsCount: Int = 0,
+    val criticalWidgetsCount: Int = 0,
+    val enabledWidgetsCount: Int = 0,
+    val disabledWidgetsCount: Int = 0
+)
+data class DashboardWidget(
+    val id: String,
+    val title: String,
+    val description: String? = null,
+    val type: DashboardWidgetType,
+    val priority: DashboardWidgetPriority = DashboardWidgetPriority.Normal,
+    val isEnabled: Boolean = true,
+    val isPinned: Boolean = false,
+    val valueLabel: String? = null,
+    val accentKey: String? = null
+) {
+    fun isEmpty(): Boolean {
+        return !isEnabled || (title.isBlank() && description.isNullOrBlank() && valueLabel.isNullOrBlank())
+    }
+}
+enum class DashboardWidgetType(val compactWeight: Int) {
+    Overview(100),
+    Sales(95),
+    Trend(90),
+    Inventory(85),
+    Customers(75),
+    Financial(80),
+    Alerts(98),
+    QuickActions(60),
+    Highlight(70),
+    Risk(96)
+}
+enum class DashboardWidgetPriority(val rank: Int) {
+    Low(1),
+    Normal(2),
+    High(3),
+    Critical(4)
+}
+data class DashboardWidgetAction(
+    val widgetId: String,
+    val quickAction: DashboardQuickAction
+)
+
+------------------------------
+FILE: RefreshDashboardData.kt
+------------------------------
+package com.myimdad_por.domain.usecase.dashboard
+import com.myimdad_por.domain.model.Dashboard
+import com.myimdad_por.domain.repository.DashboardRepository
+class RefreshDashboardData(
+    private val repository: DashboardRepository,
+    private val getFilteredDashboardData: GetFilteredDashboardData = GetFilteredDashboardData()
+) {
+    suspend operator fun invoke(
+        forceRefresh: Boolean = true,
+        filter: DashboardDataFilter = DashboardDataFilter()
+    ): Result<Dashboard> {
+        return repository.refreshDashboard().map { dashboard ->
+            getFilteredDashboardData(
+                dashboard = dashboard,
+                filter = filter
+            )
+        }
     }
 }
 
 ------------------------------
-FILE: SubscriptionWarningBanner.kt
+FILE: GetRealtimeDashboardUpdates.kt
 ------------------------------
-package com.myimdad_por.ui.components
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import com.myimdad_por.ui.theme.AppDimens
-import com.myimdad_por.ui.theme.AppShapeTokens
-import com.myimdad_por.ui.theme.AppTypography
-import com.myimdad_por.ui.theme.WarningColor
-import com.myimdad_por.ui.theme.WarningContainer
-import com.myimdad_por.ui.theme.TextPrimaryColor
-import com.myimdad_por.ui.theme.TextSecondaryColor
-@Composable
-fun SubscriptionWarningBanner(
-    modifier: Modifier = Modifier,
-    title: String = "تنبيه الاشتراك",
-    message: String? = null,
-    daysRemaining: Int? = null,
-    actionText: String = "تجديد الآن",
-    onActionClick: () -> Unit,
-    onDismissClick: (() -> Unit)? = null,
-    visible: Boolean = true,
-    showIcon: Boolean = true,
-    backgroundColor: Color = WarningContainer,
-    contentColor: Color = TextPrimaryColor,
-    subtitleColor: Color = TextSecondaryColor
+package com.myimdad_por.domain.usecase.dashboard
+import com.myimdad_por.domain.model.Dashboard
+import com.myimdad_por.domain.repository.DashboardRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+class GetRealtimeDashboardUpdates(
+    private val repository: DashboardRepository,
+    private val getFilteredDashboardData: GetFilteredDashboardData = GetFilteredDashboardData()
 ) {
-    if (!visible) return
-    val resolvedMessage = when {
-        !message.isNullOrBlank() -> message
-        daysRemaining != null && daysRemaining > 0 -> "متبقي $daysRemaining يوم قبل انتهاء الاشتراك."
-        daysRemaining == 0 -> "ينتهي الاشتراك اليوم."
-        else -> "الاشتراك يحتاج إلى مراجعة."
-    }
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .semantics {
-                role = Role.Button
-                contentDescription = title
-            },
-        shape = AppShapeTokens.card,
-        color = backgroundColor,
-        contentColor = contentColor,
-        tonalElevation = AppDimens.Elevation.low
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(AppDimens.Layout.screenPadding)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.Start
-            ) {
-                if (showIcon) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(
-                                color = WarningColor.copy(alpha = 0.12f),
-                                shape = AppShapeTokens.buttonPill
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.WarningAmber,
-                            contentDescription = null,
-                            tint = WarningColor
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(AppDimens.Spacing.small))
-                }
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(top = 2.dp)
-                ) {
-                    Text(
-                        text = title,
-                        style = AppTypography.titleMedium,
-                        color = contentColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.size(AppDimens.Spacing.extraSmall))
-                    Text(
-                        text = resolvedMessage,
-                        style = AppTypography.bodyMedium,
-                        color = subtitleColor,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (daysRemaining != null) {
-                        Spacer(modifier = Modifier.size(AppDimens.Spacing.small))
-                        SubscriptionCountdownPill(daysRemaining = daysRemaining)
-                    }
-                }
-            }
-            if (onActionClick != null || onDismissClick != null) {
-                Spacer(modifier = Modifier.size(AppDimens.Spacing.medium))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (onDismissClick != null) {
-                        AppButton(
-                            text = "لاحقًا",
-                            onClick = onDismissClick,
-                            variant = AppButtonVariant.Outlined,
-                            size = AppButtonSize.Small,
-                            fullWidth = false
-                        )
-                        Spacer(modifier = Modifier.width(AppDimens.Spacing.small))
-                    }
-                    AppButton(
-                        text = actionText,
-                        onClick = onActionClick,
-                        variant = AppButtonVariant.Primary,
-                        size = AppButtonSize.Small,
-                        fullWidth = false
-                    )
-                }
-            }
+    operator fun invoke(
+        filter: DashboardDataFilter = DashboardDataFilter()
+    ): Flow<Dashboard> {
+        return repository.observeDashboard().map { dashboard ->
+            getFilteredDashboardData(
+                dashboard = dashboard,
+                filter = filter
+            )
         }
     }
 }
-@Composable
-private fun SubscriptionCountdownPill(
-    daysRemaining: Int
-) {
-    val text = when {
-        daysRemaining > 1 -> "متبقي $daysRemaining أيام"
-        daysRemaining == 1 -> "متبقٍ يوم واحد"
-        else -> "ينتهي اليوم"
-    }
-    Surface(
-        shape = AppShapeTokens.chip,
-        color = WarningColor.copy(alpha = 0.16f),
-        contentColor = WarningColor
-    ) {
-        Text(
-            text = text,
-            style = AppTypography.labelMedium,
-            modifier = Modifier
-                .padding(horizontal = AppDimens.Spacing.small, vertical = 4.dp),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+
+------------------------------
+FILE: GetFilteredDashboardData.kt
+------------------------------
+package com.myimdad_por.domain.usecase.dashboard
+import com.myimdad_por.domain.model.Dashboard
+import com.myimdad_por.domain.model.DashboardAlert
+import com.myimdad_por.domain.model.DashboardAlertLevel
+import com.myimdad_por.domain.model.DashboardCustomerSummary
+import com.myimdad_por.domain.model.DashboardFinancialSummary
+import com.myimdad_por.domain.model.DashboardInventorySummary
+import com.myimdad_por.domain.model.DashboardOverview
+import com.myimdad_por.domain.model.DashboardQuickAction
+import com.myimdad_por.domain.model.DashboardSalesSummary
+class GetFilteredDashboardData {
+    operator fun invoke(
+        dashboard: Dashboard?,
+        filter: DashboardDataFilter = DashboardDataFilter()
+    ): Dashboard {
+        if (dashboard == null) return Dashboard()
+        return dashboard.copy(
+            overview = if (filter.includeOverview) dashboard.overview else DashboardOverview(),
+            sales = if (filter.includeSales) dashboard.sales else DashboardSalesSummary(),
+            inventory = if (filter.includeInventory) dashboard.inventory else DashboardInventorySummary(),
+            customers = if (filter.includeCustomers) dashboard.customers else DashboardCustomerSummary(),
+            financial = if (filter.includeFinancial) {
+                dashboard.financial
+            } else {
+                DashboardFinancialSummary(currencyCode = dashboard.financial.currencyCode)
+            },
+            alerts = if (filter.includeAlerts) {
+                dashboard.alerts.filterAlerts(filter)
+            } else {
+                emptyList()
+            },
+            quickActions = if (filter.includeQuickActions) {
+                dashboard.quickActions.filterQuickActions(filter)
+            } else {
+                emptyList()
+            },
+            lastUpdatedAtEpochMillis = if (filter.includeLastUpdatedAt) {
+                dashboard.lastUpdatedAtEpochMillis
+            } else {
+                null
+            }
         )
     }
+    private fun List<DashboardAlert>.filterAlerts(filter: DashboardDataFilter): List<DashboardAlert> {
+        return asSequence()
+            .filter { alert ->
+                filter.allowedAlertLevels.isNullOrEmpty() || alert.level in filter.allowedAlertLevels
+            }
+            .filter { alert ->
+                filter.allowedAlertIds.isNullOrEmpty() || alert.id in filter.allowedAlertIds
+            }
+            .filter { alert ->
+                filter.searchQuery.isNullOrBlank() ||
+                    alert.title.contains(filter.searchQuery, ignoreCase = true) ||
+                    alert.message.contains(filter.searchQuery, ignoreCase = true)
+            }
+            .takeIf { filter.maxAlertsCount != null }
+            ?.take(filter.maxAlertsCount!!)
+            ?.toList()
+            ?: toList()
+    }
+    private fun List<DashboardQuickAction>.filterQuickActions(
+        filter: DashboardDataFilter
+    ): List<DashboardQuickAction> {
+        return asSequence()
+            .filter { action ->
+                filter.allowedQuickActionIds.isNullOrEmpty() || action.id in filter.allowedQuickActionIds
+            }
+            .filter { action ->
+                filter.searchQuery.isNullOrBlank() ||
+                    action.title.contains(filter.searchQuery, ignoreCase = true) ||
+                    (action.description?.contains(filter.searchQuery, ignoreCase = true) == true)
+            }
+            .filter { action ->
+                filter.onlyNavigableQuickActions.not() || action.canNavigate
+            }
+            .takeIf { filter.maxQuickActionsCount != null }
+            ?.take(filter.maxQuickActionsCount!!)
+            ?.toList()
+            ?: toList()
+    }
 }
-@Composable
-fun SubscriptionExpiredBanner(
-    modifier: Modifier = Modifier,
-    onActionClick: () -> Unit,
-    onDismissClick: (() -> Unit)? = null,
-    visible: Boolean = true
-) {
-    SubscriptionWarningBanner(
-        modifier = modifier,
-        title = "انتهت مدة الاشتراك",
-        message = "يرجى تجديد الاشتراك لمتابعة استخدام جميع ميزات التطبيق.",
-        actionText = "تجديد الاشتراك",
-        onActionClick = onActionClick,
-        onDismissClick = onDismissClick,
-        visible = visible,
-        showIcon = true
-    )
+data class DashboardDataFilter(
+    val includeOverview: Boolean = true,
+    val includeSales: Boolean = true,
+    val includeInventory: Boolean = true,
+    val includeCustomers: Boolean = true,
+    val includeFinancial: Boolean = true,
+    val includeAlerts: Boolean = true,
+    val includeQuickActions: Boolean = true,
+    val includeLastUpdatedAt: Boolean = true,
+    val allowedAlertLevels: Set<DashboardAlertLevel>? = null,
+    val allowedAlertIds: Set<String> = emptySet(),
+    val allowedQuickActionIds: Set<String> = emptySet(),
+    val searchQuery: String? = null,
+    val maxAlertsCount: Int? = null,
+    val maxQuickActionsCount: Int? = null,
+    val onlyNavigableQuickActions: Boolean = false
+)
+
+------------------------------
+FILE: CheckDashboardAccess.kt
+------------------------------
+package com.myimdad_por.domain.usecase.dashboard
+import com.myimdad_por.domain.model.Dashboard
+import com.myimdad_por.domain.model.DashboardQuickAction
+class CheckDashboardAccess {
+    operator fun invoke(
+        dashboard: Dashboard?,
+        permissions: DashboardPermissions = DashboardPermissions()
+    ): DashboardAccessResult {
+        if (dashboard == null) {
+            return DashboardAccessResult(
+                canAccessDashboard = false,
+                allowedQuickActions = emptyList(),
+                deniedQuickActions = emptyList(),
+                reason = "لا توجد بيانات لوحة تحكم متاحة"
+            )
+        }
+        val allowedActions = dashboard.quickActions.filter { action ->
+            action.isEnabled && isActionAllowed(action, permissions)
+        }
+        val deniedActions = dashboard.quickActions.filterNot { action ->
+            action.isEnabled && isActionAllowed(action, permissions)
+        }
+        val canAccessDashboard = permissions.canViewDashboard
+        return DashboardAccessResult(
+            canAccessDashboard = canAccessDashboard,
+            allowedQuickActions = allowedActions,
+            deniedQuickActions = deniedActions,
+            reason = when {
+                !canAccessDashboard -> "ليس لديك صلاحية عرض لوحة التحكم"
+                dashboard.quickActions.isEmpty() -> "لوحة التحكم متاحة لكن لا توجد إجراءات سريعة"
+                else -> null
+            }
+        )
+    }
+    private fun isActionAllowed(
+        action: DashboardQuickAction,
+        permissions: DashboardPermissions
+    ): Boolean {
+        val requiredPermission = action.requiresPermission?.trim().orEmpty()
+        return when {
+            requiredPermission.isBlank() -> true
+            requiredPermission.equals(PermissionNames.VIEW_SALES, ignoreCase = true) -> permissions.canViewSales
+            requiredPermission.equals(PermissionNames.CREATE_SALES, ignoreCase = true) -> permissions.canCreateSales
+            requiredPermission.equals(PermissionNames.VIEW_CUSTOMERS, ignoreCase = true) -> permissions.canViewCustomers
+            requiredPermission.equals(PermissionNames.VIEW_INVENTORY, ignoreCase = true) -> permissions.canViewInventory
+            requiredPermission.equals(PermissionNames.VIEW_REPORTS, ignoreCase = true) -> permissions.canViewReports
+            requiredPermission.equals(PermissionNames.VIEW_FINANCE, ignoreCase = true) -> permissions.canViewFinance
+            else -> permissions.customPermissions.contains(requiredPermission)
+        }
+    }
 }
-@Composable
-fun SubscriptionDueSoonBanner(
-    modifier: Modifier = Modifier,
-    daysRemaining: Int,
-    onActionClick: () -> Unit,
-    onDismissClick: (() -> Unit)? = null,
-    visible: Boolean = true
+data class DashboardPermissions(
+    val canViewDashboard: Boolean = true,
+    val canViewSales: Boolean = true,
+    val canCreateSales: Boolean = true,
+    val canViewCustomers: Boolean = true,
+    val canViewInventory: Boolean = true,
+    val canViewReports: Boolean = true,
+    val canViewFinance: Boolean = true,
+    val customPermissions: Set<String> = emptySet()
+)
+data class DashboardAccessResult(
+    val canAccessDashboard: Boolean,
+    val allowedQuickActions: List<DashboardQuickAction>,
+    val deniedQuickActions: List<DashboardQuickAction>,
+    val reason: String? = null
 ) {
-    SubscriptionWarningBanner(
-        modifier = modifier,
-        title = "الاشتراك يقترب من الانتهاء",
-        daysRemaining = daysRemaining,
-        actionText = "تجديد الآن",
-        onActionClick = onActionClick,
-        onDismissClick = onDismissClick,
-        visible = visible,
-        showIcon = true
-    )
+    val hasAllowedActions: Boolean
+        get() = allowedQuickActions.isNotEmpty()
+    val hasDeniedActions: Boolean
+        get() = deniedQuickActions.isNotEmpty()
+}
+private object PermissionNames {
+    const val VIEW_SALES = "VIEW_SALES"
+    const val CREATE_SALES = "CREATE_SALES"
+    const val VIEW_CUSTOMERS = "VIEW_CUSTOMERS"
+    const val VIEW_INVENTORY = "VIEW_INVENTORY"
+    const val VIEW_REPORTS = "VIEW_REPORTS"
+    const val VIEW_FINANCE = "VIEW_FINANCE"
+}
+
+------------------------------
+FILE: CalculateKpis.kt
+------------------------------
+package com.myimdad_por.domain.usecase.dashboard
+import com.myimdad_por.domain.model.Dashboard
+import com.myimdad_por.domain.model.DashboardMetric
+import com.myimdad_por.domain.model.money
+import java.math.BigDecimal
+import java.math.RoundingMode
+class CalculateKpis {
+    operator fun invoke(dashboard: Dashboard?): List<DashboardMetric> {
+        if (dashboard == null) return emptyList()
+        val sales = dashboard.sales
+        val inventory = dashboard.inventory
+        val customers = dashboard.customers
+        val financial = dashboard.financial
+        val metrics = buildList {
+            add(
+                DashboardMetric(
+                    key = "today_sales_count",
+                    label = "مبيعات اليوم",
+                    value = dashboard.sales.todaySalesCount.toBigDecimal(),
+                    formattedValue = dashboard.sales.todaySalesCount.toString(),
+                    deltaPercent = dashboard.sales.growthRatePercent,
+                    deltaLabel = dashboard.sales.growthRatePercent?.let { "نمو المبيعات" },
+                    isPositiveTrend = (dashboard.sales.growthRatePercent ?: BigDecimal.ZERO) >= BigDecimal.ZERO,
+                    accentKey = "sales"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "today_revenue",
+                    label = "إيراد اليوم",
+                    value = sales.todayRevenue.money(),
+                    formattedValue = sales.todayRevenue.money().toPlainString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = true,
+                    accentKey = "revenue"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "month_revenue",
+                    label = "إيراد الشهر",
+                    value = sales.monthRevenue.money(),
+                    formattedValue = sales.monthRevenue.money().toPlainString(),
+                    deltaPercent = sales.growthRatePercent,
+                    deltaLabel = sales.growthRatePercent?.let { "مقارنة بالشهر السابق" },
+                    isPositiveTrend = (sales.growthRatePercent ?: BigDecimal.ZERO) >= BigDecimal.ZERO,
+                    accentKey = "month_revenue"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "pending_invoices",
+                    label = "فواتير معلقة",
+                    value = sales.pendingInvoicesCount.toBigDecimal(),
+                    formattedValue = sales.pendingInvoicesCount.toString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = false,
+                    accentKey = "pending"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "returns_count",
+                    label = "المرتجعات",
+                    value = sales.returnsCount.toBigDecimal(),
+                    formattedValue = sales.returnsCount.toString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = false,
+                    accentKey = "returns"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "products_count",
+                    label = "عدد المنتجات",
+                    value = inventory.productsCount.toBigDecimal(),
+                    formattedValue = inventory.productsCount.toString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = true,
+                    accentKey = "inventory"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "low_stock_count",
+                    label = "منخفض المخزون",
+                    value = inventory.lowStockCount.toBigDecimal(),
+                    formattedValue = inventory.lowStockCount.toString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = false,
+                    accentKey = "low_stock"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "out_of_stock_count",
+                    label = "نفد المخزون",
+                    value = inventory.outOfStockCount.toBigDecimal(),
+                    formattedValue = inventory.outOfStockCount.toString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = false,
+                    accentKey = "out_of_stock"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "customers_count",
+                    label = "العملاء",
+                    value = customers.customersCount.toBigDecimal(),
+                    formattedValue = customers.customersCount.toString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = true,
+                    accentKey = "customers"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "new_customers_count",
+                    label = "عملاء جدد",
+                    value = customers.newCustomersCount.toBigDecimal(),
+                    formattedValue = customers.newCustomersCount.toString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = true,
+                    accentKey = "new_customers"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "net_balance",
+                    label = "صافي الرصيد",
+                    value = financial.netBalance.money(),
+                    formattedValue = financial.netBalance.money().toPlainString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = financial.netBalance >= BigDecimal.ZERO,
+                    accentKey = "finance"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "receivables",
+                    label = "الذمم المدينة",
+                    value = financial.receivables.money(),
+                    formattedValue = financial.receivables.money().toPlainString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = false,
+                    accentKey = "receivables"
+                )
+            )
+            add(
+                DashboardMetric(
+                    key = "payables",
+                    label = "الذمم الدائنة",
+                    value = financial.payables.money(),
+                    formattedValue = financial.payables.money().toPlainString(),
+                    deltaPercent = null,
+                    deltaLabel = null,
+                    isPositiveTrend = false,
+                    accentKey = "payables"
+                )
+            )
+            financial.profitEstimate?.let { profit ->
+                add(
+                    DashboardMetric(
+                        key = "profit_estimate",
+                        label = "الربح التقديري",
+                        value = profit.money(),
+                        formattedValue = profit.money().toPlainString(),
+                        deltaPercent = null,
+                        deltaLabel = null,
+                        isPositiveTrend = profit >= BigDecimal.ZERO,
+                        accentKey = "profit"
+                    )
+                )
+            }
+        }
+        return metrics.sortedWith(
+            compareBy<DashboardMetric> { metricPriority(it.key) }
+                .thenBy { it.label }
+        )
+    }
+    private fun metricPriority(key: String): Int {
+        return when (key) {
+            "today_sales_count" -> 0
+            "today_revenue" -> 1
+            "month_revenue" -> 2
+            "pending_invoices" -> 3
+            "returns_count" -> 4
+            "products_count" -> 5
+            "low_stock_count" -> 6
+            "out_of_stock_count" -> 7
+            "customers_count" -> 8
+            "new_customers_count" -> 9
+            "net_balance" -> 10
+            "receivables" -> 11
+            "payables" -> 12
+            "profit_estimate" -> 13
+            else -> 99
+        }
+    }
+}
+private fun Int.toBigDecimal(): BigDecimal = BigDecimal.valueOf(toLong())
+
+------------------------------
+FILE: CacheDashboardData.kt
+------------------------------
+package com.myimdad_por.domain.usecase.dashboard
+import com.myimdad_por.domain.model.Dashboard
+import com.myimdad_por.domain.repository.DashboardRepository
+class CacheDashboardData(
+    private val repository: DashboardRepository,
+    private val getFilteredDashboardData: GetFilteredDashboardData = GetFilteredDashboardData()
+) {
+    suspend operator fun invoke(
+        forceRefresh: Boolean = false,
+        filter: DashboardDataFilter = DashboardDataFilter()
+    ): Result<Dashboard> {
+        if (!forceRefresh) {
+            val cachedDashboard = repository.getCachedDashboard()
+            if (cachedDashboard != null) {
+                return Result.success(
+                    getFilteredDashboardData(
+                        dashboard = cachedDashboard,
+                        filter = filter
+                    )
+                )
+            }
+        }
+        return repository.refreshDashboard().map { dashboard ->
+            getFilteredDashboardData(
+                dashboard = dashboard,
+                filter = filter
+            )
+        }
+    }
 }
 
 ------------------------------
@@ -1246,437 +2724,5 @@ enum class DashboardPeriod {
     Month,
     Year,
     AllTime
-}
-
-------------------------------
-FILE: NavigationActions.kt
-------------------------------
-package com.myimdad_por.ui.navigation
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.NavHostController
-class NavigationActions(
-    private val navController: NavHostController
-) {
-    fun navigateToSplash() = navController.navigateSingleTopTo(ScreenRoutes.Splash)
-    fun navigateToOnboarding() = navController.navigateSingleTopTo(ScreenRoutes.Onboarding)
-    fun navigateToLogin() = navController.navigateSingleTopTo(ScreenRoutes.Login)
-    fun navigateToRegister() = navController.navigateSingleTopTo(ScreenRoutes.Register)
-    fun navigateToForgotPassword() = navController.navigateSingleTopTo(ScreenRoutes.ForgotPassword)
-    fun navigateToHome() = navController.navigateSingleTopTo(ScreenRoutes.Home)
-    fun navigateToDashboard() = navController.navigateSingleTopTo(ScreenRoutes.Dashboard)
-    fun navigateToProfile() = navController.navigateSingleTopTo(ScreenRoutes.Profile)
-    fun navigateToSettings() = navController.navigateSingleTopTo(ScreenRoutes.Settings)
-    fun navigateToNotifications() = navController.navigateSingleTopTo(ScreenRoutes.Notifications)
-    fun navigateToSearch() = navController.navigateSingleTopTo(ScreenRoutes.Search)
-    fun navigateToCustomers() = navController.navigateSingleTopTo(ScreenRoutes.Customers)
-    fun navigateToCustomerCreate() = navController.navigateSingleTopTo(ScreenRoutes.CustomerCreate)
-    fun navigateToCustomerDetails(id: String) = navController.navigate(ScreenRoutes.customerDetails(id))
-    fun navigateToSuppliers() = navController.navigateSingleTopTo(ScreenRoutes.Suppliers)
-    fun navigateToSupplierCreate() = navController.navigateSingleTopTo(ScreenRoutes.SupplierCreate)
-    fun navigateToSupplierDetails(id: String) = navController.navigate(ScreenRoutes.supplierDetails(id))
-    fun navigateToProducts() = navController.navigateSingleTopTo(ScreenRoutes.Products)
-    fun navigateToProductCreate() = navController.navigateSingleTopTo(ScreenRoutes.ProductCreate)
-    fun navigateToProductDetails(id: String) = navController.navigate(ScreenRoutes.productDetails(id))
-    fun navigateToInventory() = navController.navigateSingleTopTo(ScreenRoutes.Inventory)
-    fun navigateToStockMovement() = navController.navigateSingleTopTo(ScreenRoutes.StockMovement)
-    fun navigateToInvoices() = navController.navigateSingleTopTo(ScreenRoutes.Invoices)
-    fun navigateToInvoiceCreate() = navController.navigateSingleTopTo(ScreenRoutes.InvoiceCreate)
-    fun navigateToInvoiceDetails(id: String) = navController.navigate(ScreenRoutes.invoiceDetails(id))
-    fun navigateToPurchases() = navController.navigateSingleTopTo(ScreenRoutes.Purchases)
-    fun navigateToPurchaseCreate() = navController.navigateSingleTopTo(ScreenRoutes.PurchaseCreate)
-    fun navigateToPurchaseDetails(id: String) = navController.navigate(ScreenRoutes.purchaseDetails(id))
-    fun navigateToSales() = navController.navigateSingleTopTo(ScreenRoutes.Sales)
-    fun navigateToSaleCreate() = navController.navigateSingleTopTo(ScreenRoutes.SaleCreate)
-    fun navigateToSaleDetails(id: String) = navController.navigate(ScreenRoutes.saleDetails(id))
-    fun navigateToPayments() = navController.navigateSingleTopTo(ScreenRoutes.Payments)
-    fun navigateToPaymentCreate() = navController.navigateSingleTopTo(ScreenRoutes.PaymentCreate)
-    fun navigateToPaymentDetails(id: String) = navController.navigate(ScreenRoutes.paymentDetails(id))
-    fun navigateToReturns() = navController.navigateSingleTopTo(ScreenRoutes.Returns)
-    fun navigateToReturnCreate() = navController.navigateSingleTopTo(ScreenRoutes.ReturnCreate)
-    fun navigateToReturnDetails(id: String) = navController.navigate(ScreenRoutes.returnDetails(id))
-    fun navigateToExpenses() = navController.navigateSingleTopTo(ScreenRoutes.Expenses)
-    fun navigateToExpenseCreate() = navController.navigateSingleTopTo(ScreenRoutes.ExpenseCreate)
-    fun navigateToExpenseDetails(id: String) = navController.navigate(ScreenRoutes.expenseDetails(id))
-    fun navigateToReports() = navController.navigateSingleTopTo(ScreenRoutes.Reports)
-    fun navigateToAnalytics() = navController.navigateSingleTopTo(ScreenRoutes.Analytics)
-    fun navigateToAuditLogs() = navController.navigateSingleTopTo(ScreenRoutes.AuditLogs)
-    fun navigateToSubscription() = navController.navigateSingleTopTo(ScreenRoutes.Subscription)
-    fun navigateToSubscriptionExpired() = navController.navigateSingleTopTo(ScreenRoutes.SubscriptionExpired)
-    fun navigateToSubscriptionRenew() = navController.navigateSingleTopTo(ScreenRoutes.SubscriptionRenew)
-    fun navigateBack() {
-        navController.popBackStack()
-    }
-    fun navigateBackTo(route: String, inclusive: Boolean = false) {
-        navController.popBackStack(route, inclusive)
-    }
-    fun clearBackStackAndGoToHome() {
-        navController.navigate(ScreenRoutes.Home) {
-            popUpTo(0)
-            launchSingleTop = true
-            restoreState = false
-        }
-    }
-    private fun NavHostController.navigateSingleTopTo(route: String) {
-        navigate(route) {
-            launchSingleTop = true
-            restoreState = true
-            popUpTo(graph.findStartDestination().id) {
-                saveState = true
-            }
-        }
-    }
-}
-
-------------------------------
-FILE: ScreenRoutes.kt
-------------------------------
-package com.myimdad_por.ui.navigation
-object ScreenRoutes {
-    const val Splash = "splash"
-    const val Onboarding = "onboarding"
-    const val Login = "login"
-    const val Register = "register"
-    const val ForgotPassword = "forgot_password"
-    const val Home = "home"
-    const val Dashboard = "dashboard"
-    const val Profile = "profile"
-    const val Settings = "settings"
-    const val Notifications = "notifications"
-    const val Search = "search"
-    const val Customers = "customers"
-    const val CustomerCreate = "customer_create"
-    const val Suppliers = "suppliers"
-    const val SupplierCreate = "supplier_create"
-    const val Products = "products"
-    const val ProductCreate = "product_create"
-    const val Inventory = "inventory"
-    const val StockMovement = "stock_movement"
-    const val Invoices = "invoices"
-    const val InvoiceCreate = "invoice_create"
-    const val Purchases = "purchases"
-    const val PurchaseCreate = "purchase_create"
-    const val Sales = "sales"
-    const val SaleCreate = "sale_create"
-    const val Payments = "payments"
-    const val PaymentCreate = "payment_create"
-    const val Returns = "returns"
-    const val ReturnCreate = "return_create"
-    const val Expenses = "expenses"
-    const val ExpenseCreate = "expense_create"
-    const val Reports = "reports"
-    const val Analytics = "analytics"
-    const val AuditLogs = "audit_logs"
-    const val Subscription = "subscription"
-    const val SubscriptionExpired = "subscription_expired"
-    const val SubscriptionRenew = "subscription_renew"
-    const val ARG_ID = "id"
-    const val ARG_STATUS = "status"
-    const val ARG_MODE = "mode"
-    const val ARG_QUERY = "query"
-    const val CustomerDetailsPattern = "customer_details/{$ARG_ID}"
-    const val SupplierDetailsPattern = "supplier_details/{$ARG_ID}"
-    const val ProductDetailsPattern = "product_details/{$ARG_ID}"
-    const val InvoiceDetailsPattern = "invoice_details/{$ARG_ID}"
-    const val PurchaseDetailsPattern = "purchase_details/{$ARG_ID}"
-    const val SaleDetailsPattern = "sale_details/{$ARG_ID}"
-    const val PaymentDetailsPattern = "payment_details/{$ARG_ID}"
-    const val ReturnDetailsPattern = "return_details/{$ARG_ID}"
-    const val ExpenseDetailsPattern = "expense_details/{$ARG_ID}"
-    fun customerDetails(id: String): String = "customer_details/$id"
-    fun supplierDetails(id: String): String = "supplier_details/$id"
-    fun productDetails(id: String): String = "product_details/$id"
-    fun invoiceDetails(id: String): String = "invoice_details/$id"
-    fun purchaseDetails(id: String): String = "purchase_details/$id"
-    fun saleDetails(id: String): String = "sale_details/$id"
-    fun paymentDetails(id: String): String = "payment_details/$id"
-    fun returnDetails(id: String): String = "return_details/$id"
-    fun expenseDetails(id: String): String = "expense_details/$id"
-    fun search(query: String): String = "search/$query"
-    fun notifications(status: String): String = "notifications/$status"
-}
-
-------------------------------
-FILE: Color.kt
-------------------------------
-package com.myimdad_por.ui.theme
-import androidx.compose.ui.graphics.Color
-val BrandPrimary = Color(0xFF25D366)
-val BrandPrimaryDark = Color(0xFF128C7E)
-val BrandSecondary = Color(0xFF075E54)
-val BrandPrimaryTint = Color(0xFFE7F8EE)
-val BrandPrimarySoft = Color(0xFFF0FFF5)
-val SuccessColor = Color(0xFF1E9E5A)
-val SuccessContainer = Color(0xFFE8F7EE)
-val ErrorColor = Color(0xFFE53935)
-val ErrorContainer = Color(0xFFFDECEC)
-val WarningColor = Color(0xFFFFB300)
-val WarningContainer = Color(0xFFFFF6DB)
-val InfoColor = Color(0xFF1A73E8)
-val InfoContainer = Color(0xFFE8F1FE)
-val IncomeColor = Color(0xFF1E9E5A)
-val IncomeContainer = Color(0xFFE8F7EE)
-val ExpenseColor = Color(0xFFD93025)
-val ExpenseContainer = Color(0xFFFDECEC)
-val CreditColor = Color(0xFF0F9D58)
-val DebitColor = Color(0xFFDB4437)
-val BackgroundColor = Color(0xFFF7F8FA)
-val SurfaceColor = Color(0xFFFFFFFF)
-val SurfaceVariantColor = Color(0xFFF1F3F5)
-val DividerColor = Color(0xFFE9EDEF)
-val BorderColor = Color(0xFFDDE3E8)
-val TextPrimaryColor = Color(0xFF111B21)
-val TextSecondaryColor = Color(0xFF667781)
-val TextTertiaryColor = Color(0xFF8696A0)
-val TextDisabledColor = Color(0xFFADB8C1)
-val IconColor = Color(0xFF54656F)
-val IconMutedColor = Color(0xFF8696A0)
-val IconOnBrandColor = Color(0xFFFFFFFF)
-val IncomingBubbleColor = Color(0xFFFFFFFF)
-val OutgoingBubbleColor = Color(0xFFD9FDD3)
-val IncomingBubbleTextColor = Color(0xFF111B21)
-val OutgoingBubbleTextColor = Color(0xFF111B21)
-val NavigationSelectedColor = Color(0xFF25D366)
-val NavigationUnselectedColor = Color(0xFF667781)
-val FloatingActionButtonColor = Color(0xFF25D366)
-val FloatingActionButtonContentColor = Color(0xFFFFFFFF)
-val BadgeColor = Color(0xFF25D366)
-val BadgeContentColor = Color(0xFFFFFFFF)
-val DarkBackgroundColor = Color(0xFF0B141A)
-val DarkSurfaceColor = Color(0xFF111B21)
-val DarkSurfaceVariantColor = Color(0xFF1F2C33)
-val DarkDividerColor = Color(0xFF2A3942)
-val DarkBorderColor = Color(0xFF33424C)
-val DarkTextPrimaryColor = Color(0xFFE9EDEF)
-val DarkTextSecondaryColor = Color(0xFFAEBAC1)
-val DarkTextTertiaryColor = Color(0xFF8696A0)
-val DarkTextDisabledColor = Color(0xFF6E7B83)
-val DarkIconColor = Color(0xFFAEBAC1)
-val DarkIconMutedColor = Color(0xFF8696A0)
-val DarkIncomingBubbleColor = Color(0xFF202C33)
-val DarkOutgoingBubbleColor = Color(0xFF005C4B)
-val DarkIncomingBubbleTextColor = Color(0xFFE9EDEF)
-val DarkOutgoingBubbleTextColor = Color(0xFFE9EDEF)
-val TransparentColor = Color(0x00000000)
-val WhiteColor = Color(0xFFFFFFFF)
-val BlackColor = Color(0xFF000000)
-
-------------------------------
-FILE: Dimens.kt
-------------------------------
-package com.myimdad_por.ui.theme
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-object AppDimens {
-    object Spacing {
-        val none: Dp = 0.dp
-        val extraSmall: Dp = 4.dp
-        val small: Dp = 8.dp
-        val medium: Dp = 12.dp
-        val normal: Dp = 16.dp
-        val large: Dp = 20.dp
-        val extraLarge: Dp = 24.dp
-        val huge: Dp = 32.dp
-        val xLarge: Dp = 40.dp
-        val xxLarge: Dp = 48.dp
-    }
-    object Radius {
-        val none: Dp = 0.dp
-        val small: Dp = 8.dp
-        val medium: Dp = 12.dp
-        val large: Dp = 16.dp
-        val extraLarge: Dp = 20.dp
-        val round: Dp = 999.dp
-    }
-    object Elevation {
-        val none: Dp = 0.dp
-        val low: Dp = 2.dp
-        val medium: Dp = 4.dp
-        val high: Dp = 8.dp
-        val veryHigh: Dp = 12.dp
-    }
-    object Icon {
-        val tiny: Dp = 14.dp
-        val small: Dp = 18.dp
-        val normal: Dp = 24.dp
-        val large: Dp = 28.dp
-        val extraLarge: Dp = 32.dp
-        val avatar: Dp = 40.dp
-        val fab: Dp = 56.dp
-    }
-    object Component {
-        val chipHeight: Dp = 32.dp
-        val buttonHeight: Dp = 48.dp
-        val textFieldHeight: Dp = 56.dp
-        val topBarHeight: Dp = 64.dp
-        val bottomBarHeight: Dp = 72.dp
-        val avatarSmall: Dp = 32.dp
-        val avatarMedium: Dp = 40.dp
-        val avatarLarge: Dp = 56.dp
-        val cardMinHeight: Dp = 72.dp
-        val dialogMaxWidth: Dp = 320.dp
-        val dividerThickness: Dp = 1.dp
-        val borderThickness: Dp = 1.dp
-    }
-    object Text {
-        val caption = 12.sp
-        val bodySmall = 13.sp
-        val body = 14.sp
-        val bodyLarge = 16.sp
-        val titleSmall = 18.sp
-        val title = 20.sp
-        val headline = 24.sp
-        val display = 30.sp
-    }
-    object Layout {
-        val screenPadding: Dp = 16.dp
-        val sectionPadding: Dp = 20.dp
-        val listItemVerticalPadding: Dp = 12.dp
-        val listItemHorizontalPadding: Dp = 16.dp
-        val contentMaxWidth: Dp = 480.dp
-        val imageHeight: Dp = 180.dp
-        val emptyStateIconSize: Dp = 72.dp
-    }
-    object Chat {
-        val bubbleMaxWidth: Dp = 280.dp
-        val bubblePadding: Dp = 12.dp
-        val messageSpacing: Dp = 8.dp
-    }
-}
-
-------------------------------
-FILE: Theme.kt
-------------------------------
-package com.myimdad_por.ui.theme
-import androidx.compose.ui.graphics.Color
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
-import com.myimdad_por.R
-private val lightColorScheme = lightColorScheme(
-    primary = BrandPrimary,
-    onPrimary = IconOnBrandColor,
-    primaryContainer = BrandPrimaryTint,
-    onPrimaryContainer = TextPrimaryColor,
-    secondary = BrandSecondary,
-    onSecondary = WhiteColor,
-    secondaryContainer = BrandPrimarySoft,
-    onSecondaryContainer = TextPrimaryColor,
-    tertiary = InfoColor,
-    onTertiary = WhiteColor,
-    tertiaryContainer = InfoContainer,
-    onTertiaryContainer = TextPrimaryColor,
-    error = ErrorColor,
-    onError = WhiteColor,
-    errorContainer = ErrorContainer,
-    onErrorContainer = TextPrimaryColor,
-    background = BackgroundColor,
-    onBackground = TextPrimaryColor,
-    surface = SurfaceColor,
-    onSurface = TextPrimaryColor,
-    surfaceVariant = SurfaceVariantColor,
-    onSurfaceVariant = TextSecondaryColor,
-    outline = BorderColor,
-    outlineVariant = DividerColor,
-    inverseOnSurface = WhiteColor,
-    inverseSurface = DarkSurfaceColor,
-    inversePrimary = BrandPrimary,
-    scrim = BlackColor.copy(alpha = 0.32f)
-)
-private val darkColorScheme = darkColorScheme(
-    primary = BrandPrimary,
-    onPrimary = IconOnBrandColor,
-    primaryContainer = BrandPrimaryDark,
-    onPrimaryContainer = WhiteColor,
-    secondary = BrandPrimarySoft,
-    onSecondary = DarkTextPrimaryColor,
-    secondaryContainer = DarkSurfaceVariantColor,
-    onSecondaryContainer = DarkTextPrimaryColor,
-    tertiary = InfoColor,
-    onTertiary = WhiteColor,
-    tertiaryContainer = DarkSurfaceVariantColor,
-    onTertiaryContainer = DarkTextPrimaryColor,
-    error = ErrorColor,
-    onError = WhiteColor,
-    errorContainer = Color(0xFF5A1A1A),
-    onErrorContainer = DarkTextPrimaryColor,
-    background = DarkBackgroundColor,
-    onBackground = DarkTextPrimaryColor,
-    surface = DarkSurfaceColor,
-    onSurface = DarkTextPrimaryColor,
-    surfaceVariant = DarkSurfaceVariantColor,
-    onSurfaceVariant = DarkTextSecondaryColor,
-    outline = DarkBorderColor,
-    outlineVariant = DarkDividerColor,
-    inverseOnSurface = TextPrimaryColor,
-    inverseSurface = SurfaceColor,
-    inversePrimary = BrandPrimary,
-    scrim = BlackColor.copy(alpha = 0.45f)
-)
-@Composable
-fun ImdadPorTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
-) {
-    val context = LocalContext.current
-    val view = LocalView.current
-    val colors = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> darkColorScheme
-        else -> lightColorScheme
-    }
-    SideEffect {
-        context.findActivity()?.window?.let { window ->
-            val controller = WindowCompat.getInsetsController(window, view)
-            controller.isAppearanceLightStatusBars = !darkTheme
-            controller.isAppearanceLightNavigationBars = !darkTheme
-            window.statusBarColor = colors.surface.toArgb()
-            window.navigationBarColor = colors.surface.toArgb()
-        }
-    }
-    MaterialTheme(
-        colorScheme = colors,
-        typography = AppTypography,
-        shapes = AppShapes,
-        content = content
-    )
-}
-@Composable
-fun AppTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
-) {
-    ImdadPorTheme(
-        darkTheme = darkTheme,
-        dynamicColor = dynamicColor,
-        content = content
-    )
-}
-fun provideLightColorScheme(): ColorScheme = lightColorScheme
-fun provideDarkColorScheme(): ColorScheme = darkColorScheme
-private tailrec fun Context.findActivity(): Activity? {
-    return when (this) {
-        is Activity -> this
-        is ContextWrapper -> baseContext.findActivity()
-        else -> null
-    }
 }
 

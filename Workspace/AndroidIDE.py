@@ -26,7 +26,7 @@ def get_clean_content(file_path):
 
 def main():
     # القائمة المطلوبة من الملفات
-    files_to_find = "  DashboardUiState.kt, DashboardUiEvent.kt, AppTopBar.kt, LoadingIndicator.kt, ErrorState.kt, SubscriptionWarningBanner.kt, ScreenRoutes.kt, NavigationActions.kt, Color.kt, Dimens.kt, Theme.kt "
+    files_to_find = "  BaseViewModel.kt, DashboardUiState.kt, DashboardUiEvent.kt, AppDispatchers.kt, Dashboard.kt, StockItem.kt, Sale.kt, Expense.kt, SubscriptionInfo.kt, RefreshDashboardData.kt, GetFilteredDashboardData.kt, GetAnalyticsData.kt, CalculateKpis.kt, CheckDashboardAccess.kt, GetRealtimeDashboardUpdates.kt, ManageDashboardWidgets.kt, CacheDashboardData.kt, GetInventoryUseCase.kt, GetExpensesUseCase.kt, GetSubscriptionStatusUseCase.kt, CheckPermissionUseCase.kt, DashboardRepository.kt, SalesRepository.kt, StockRepository.kt, ExpenseRepository.kt, SubscriptionRepository.kt "
     target_filenames = {name.strip() for name in files_to_find.replace('"', '').split(',')}
     
     output_filename = "Ahme_ed"

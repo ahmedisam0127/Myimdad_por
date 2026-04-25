@@ -6,6 +6,7 @@ import com.myimdad_por.domain.model.DashboardAlertLevel
 import com.myimdad_por.domain.model.DashboardMetric
 import java.math.BigDecimal
 import java.math.RoundingMode
+import javax.inject.Inject
 
 /**
  * يجمع بيانات التحليلات الجاهزة للعرض من نموذج لوحة التحكم.
@@ -13,7 +14,7 @@ import java.math.RoundingMode
  * هذا الـ use case لا يجلب البيانات من المصدر، بل يحول Dashboard إلى بنية عرض
  * أكثر ملاءمة للشاشة أو التقرير.
  */
-class GetAnalyticsData {
+class GetAnalyticsData @Inject constructor() {
 
     operator fun invoke(dashboard: Dashboard?): AnalyticsData {
         if (dashboard == null) {
@@ -58,7 +59,9 @@ class GetAnalyticsData {
     ): AnalyticsSummary {
         val totalPositive = metrics.count { it.isPositiveTrend }
         val totalNegative = metrics.count { !it.isPositiveTrend }
-        val highPriorityAlerts = alerts.count { it.level == DashboardAlertLevel.Warning || it.level == DashboardAlertLevel.Critical }
+        val highPriorityAlerts = alerts.count {
+            it.level == DashboardAlertLevel.Warning || it.level == DashboardAlertLevel.Critical
+        }
 
         return AnalyticsSummary(
             title = dashboard.overview.title,
@@ -89,6 +92,7 @@ class GetAnalyticsData {
                     accentKey = "sales"
                 )
             )
+
             add(
                 DashboardMetric(
                     key = "today_revenue",
@@ -99,6 +103,7 @@ class GetAnalyticsData {
                     accentKey = "revenue"
                 )
             )
+
             add(
                 DashboardMetric(
                     key = "month_revenue",
@@ -111,6 +116,7 @@ class GetAnalyticsData {
                     accentKey = "month_revenue"
                 )
             )
+
             add(
                 DashboardMetric(
                     key = "pending_invoices",
@@ -121,6 +127,7 @@ class GetAnalyticsData {
                     accentKey = "pending"
                 )
             )
+
             add(
                 DashboardMetric(
                     key = "low_stock_count",
@@ -131,6 +138,7 @@ class GetAnalyticsData {
                     accentKey = "low_stock"
                 )
             )
+
             add(
                 DashboardMetric(
                     key = "out_of_stock_count",
@@ -141,6 +149,7 @@ class GetAnalyticsData {
                     accentKey = "out_of_stock"
                 )
             )
+
             add(
                 DashboardMetric(
                     key = "customers_count",
@@ -151,6 +160,7 @@ class GetAnalyticsData {
                     accentKey = "customers"
                 )
             )
+
             add(
                 DashboardMetric(
                     key = "net_balance",
@@ -161,6 +171,7 @@ class GetAnalyticsData {
                     accentKey = "finance"
                 )
             )
+
             dashboard.financial.profitEstimate?.let { profit ->
                 add(
                     DashboardMetric(
@@ -186,7 +197,8 @@ class GetAnalyticsData {
         val safeMonthly = monthly.money()
 
         val changePercent = if (safeMonthly > BigDecimal.ZERO) {
-            ((safeCurrent - safeMonthly) / safeMonthly * BigDecimal(100)).setScale(2, RoundingMode.HALF_UP)
+            ((safeCurrent - safeMonthly) / safeMonthly * BigDecimal(100))
+                .setScale(2, RoundingMode.HALF_UP)
         } else {
             BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
         }
@@ -242,4 +254,5 @@ data class AnalyticsTrend(
 )
 
 private fun Int.toBigDecimal(): BigDecimal = BigDecimal.valueOf(toLong())
+
 private fun BigDecimal.money(): BigDecimal = setScale(2, RoundingMode.HALF_UP)

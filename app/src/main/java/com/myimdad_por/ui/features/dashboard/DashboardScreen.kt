@@ -1,72 +1,49 @@
 package com.myimdad_por.ui.features.dashboard
 
+import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material.icons.filled.Replay
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Storefront
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import com.myimdad_por.core.base.UiState
 import com.myimdad_por.domain.model.Expense
 import com.myimdad_por.domain.model.PaymentTransaction
 import com.myimdad_por.domain.model.Report
@@ -75,690 +52,357 @@ import com.myimdad_por.ui.components.AppTopBar
 import com.myimdad_por.ui.components.ErrorState
 import com.myimdad_por.ui.components.ErrorStateStyle
 import com.myimdad_por.ui.components.LoadingIndicator
+import com.myimdad_por.ui.components.SubscriptionWarningBanner
 import com.myimdad_por.ui.theme.AppDimens
-import com.myimdad_por.ui.theme.BrandPrimary
+import com.myimdad_por.ui.theme.AppShapeTokens
+import com.myimdad_por.ui.theme.AppTypography
 import com.myimdad_por.ui.theme.ErrorColor
-import com.myimdad_por.ui.theme.ExpenseColor
-import com.myimdad_por.ui.theme.IncomeColor
+import com.myimdad_por.ui.theme.ErrorContainer
 import com.myimdad_por.ui.theme.InfoColor
+import com.myimdad_por.ui.theme.InfoContainer
+import com.myimdad_por.ui.theme.IncomeColor
+import com.myimdad_por.ui.theme.IncomeContainer
+import com.myimdad_por.ui.theme.TextPrimaryColor
+import com.myimdad_por.ui.theme.TextSecondaryColor
 import com.myimdad_por.ui.theme.WarningColor
-import kotlinx.coroutines.launch
+import com.myimdad_por.ui.theme.WarningContainer
 import java.math.BigDecimal
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.text.NumberFormat
+import java.util.Currency
 import java.util.Locale
 
 @Composable
-fun DashboardRoute(
-    onSaleClick: (String) -> Unit,
-    onExpenseClick: (String) -> Unit,
-    onReportClick: (String) -> Unit,
-    onTransactionClick: (String) -> Unit,
-    onNavigateToSales: () -> Unit,
-    onNavigateToExpenses: () -> Unit,
-    onNavigateToReports: () -> Unit,
-    onNavigateToAccounting: (() -> Unit)? = null,
-    onNavigateToCustomers: (() -> Unit)? = null,
-    onNavigateToInventory: (() -> Unit)? = null,
-    onNavigateToPayments: (() -> Unit)? = null,
-    onNavigateToPurchases: (() -> Unit)? = null,
-    onNavigateToReturns: (() -> Unit)? = null,
-    onNavigateToSecurity: (() -> Unit)? = null,
-    onNavigateToSettings: (() -> Unit)? = null,
-    onNavigateToSubscription: (() -> Unit)? = null,
-    onNavigateToSuppliers: (() -> Unit)? = null,
-    onLogoutClick: (() -> Unit)? = null,
-    viewModel: DashboardViewModel = hiltViewModel()
-) {
-    val uiState by viewModel.uiState.collectAsState()
-
-    DashboardScreen(
-        uiState = uiState,
-        onRefresh = { viewModel.onEvent(DashboardUiEvent.Refresh) },
-        onPeriodChange = { period -> viewModel.onEvent(DashboardUiEvent.ChangePeriod(period)) },
-        onSaleClick = onSaleClick,
-        onExpenseClick = onExpenseClick,
-        onReportClick = onReportClick,
-        onTransactionClick = onTransactionClick,
-        onNavigateToSales = onNavigateToSales,
-        onNavigateToExpenses = onNavigateToExpenses,
-        onNavigateToReports = onNavigateToReports,
-        onNavigateToAccounting = onNavigateToAccounting,
-        onNavigateToCustomers = onNavigateToCustomers,
-        onNavigateToInventory = onNavigateToInventory,
-        onNavigateToPayments = onNavigateToPayments,
-        onNavigateToPurchases = onNavigateToPurchases,
-        onNavigateToReturns = onNavigateToReturns,
-        onNavigateToSecurity = onNavigateToSecurity,
-        onNavigateToSettings = onNavigateToSettings,
-        onNavigateToSubscription = onNavigateToSubscription,
-        onNavigateToSuppliers = onNavigateToSuppliers,
-        onLogoutClick = onLogoutClick
-    )
-}
-
-@Composable
 fun DashboardScreen(
-    uiState: UiState<DashboardUiState>,
-    onRefresh: () -> Unit,
-    onPeriodChange: (DashboardPeriod) -> Unit,
-    onSaleClick: (String) -> Unit,
-    onExpenseClick: (String) -> Unit,
-    onReportClick: (String) -> Unit,
-    onTransactionClick: (String) -> Unit,
-    onNavigateToSales: () -> Unit,
-    onNavigateToExpenses: () -> Unit,
-    onNavigateToReports: () -> Unit,
-    onNavigateToAccounting: (() -> Unit)? = null,
-    onNavigateToCustomers: (() -> Unit)? = null,
-    onNavigateToInventory: (() -> Unit)? = null,
-    onNavigateToPayments: (() -> Unit)? = null,
-    onNavigateToPurchases: (() -> Unit)? = null,
-    onNavigateToReturns: (() -> Unit)? = null,
-    onNavigateToSecurity: (() -> Unit)? = null,
-    onNavigateToSettings: (() -> Unit)? = null,
-    onNavigateToSubscription: (() -> Unit)? = null,
-    onNavigateToSuppliers: (() -> Unit)? = null,
-    onLogoutClick: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
-) {
-    val state = when (uiState) {
-        is UiState.Success -> uiState.data
-        is UiState.Error -> DashboardUiState(
-            isLoading = false,
-            errorMessage = uiState.message
-        )
-        UiState.Loading -> DashboardUiState(isLoading = true)
-        UiState.Empty -> DashboardUiState()
-        UiState.Idle -> DashboardUiState()
-    }
-
-    var drawerOpen by remember { mutableStateOf(false) }
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        val contentScale = if (drawerOpen) 0.94f else 1f
-        val contentShift = if (drawerOpen) -36f else 0f
-
-        DashboardContent(
-            state = state,
-            onOpenDrawer = { drawerOpen = true },
-            onRefresh = onRefresh,
-            onPeriodChange = onPeriodChange,
-            onSaleClick = onSaleClick,
-            onExpenseClick = onExpenseClick,
-            onReportClick = onReportClick,
-            onTransactionClick = onTransactionClick,
-            onNavigateToSales = onNavigateToSales,
-            onNavigateToExpenses = onNavigateToExpenses,
-            onNavigateToReports = onNavigateToReports,
-            listState = listState,
-            contentScale = contentScale,
-            contentShift = contentShift
-        )
-
-        if (drawerOpen) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f))
-                    .clickable { drawerOpen = false }
-            )
-
-            DashboardDrawerSheet(
-                modifier = Modifier.align(Alignment.CenterEnd),
-                onClose = { drawerOpen = false },
-                onNavigateToAccounting = onNavigateToAccounting,
-                onNavigateToCustomers = onNavigateToCustomers,
-                onNavigateToExpenses = onNavigateToExpenses,
-                onNavigateToInventory = onNavigateToInventory,
-                onNavigateToPayments = onNavigateToPayments,
-                onNavigateToPurchases = onNavigateToPurchases,
-                onNavigateToReports = onNavigateToReports,
-                onNavigateToReturns = onNavigateToReturns,
-                onNavigateToSales = onNavigateToSales,
-                onNavigateToSecurity = onNavigateToSecurity,
-                onNavigateToSettings = onNavigateToSettings,
-                onNavigateToSubscription = onNavigateToSubscription,
-                onNavigateToSuppliers = onNavigateToSuppliers,
-                onLogoutClick = onLogoutClick
-            )
-        }
-    }
-}
-
-@Composable
-private fun DashboardContent(
     state: DashboardUiState,
-    onOpenDrawer: () -> Unit,
-    onRefresh: () -> Unit,
-    onPeriodChange: (DashboardPeriod) -> Unit,
-    onSaleClick: (String) -> Unit,
-    onExpenseClick: (String) -> Unit,
-    onReportClick: (String) -> Unit,
-    onTransactionClick: (String) -> Unit,
-    onNavigateToSales: () -> Unit,
-    onNavigateToExpenses: () -> Unit,
-    onNavigateToReports: () -> Unit,
-    listState: LazyListState,
-    contentScale: Float,
-    contentShift: Float
+    onEvent: (DashboardUiEvent) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    LazyColumn(
-        state = listState,
-        modifier = Modifier
-            .fillMaxSize()
-            .graphicsLayer {
-                scaleX = contentScale
-                scaleY = contentScale
-                translationX = contentShift
+    Box(modifier = modifier.fillMaxSize()) {
+        when {
+            state.isLoading && !state.hasContent -> {
+                LoadingIndicator(
+                    modifier = Modifier.fillMaxSize(),
+                    title = "جارٍ تحميل البيانات",
+                    message = "يتم تجهيز لوحة التحكم الآن",
+                    centered = true,
+                )
             }
-    ) {
-        item {
-            AppTopBar(
-                title = "لوحة التحكم",
-                subtitle = dashboardSubtitle(state),
-                actions = {
-                    IconButton(onClick = onOpenDrawer) {
-                        Icon(
-                            imageVector = Icons.Filled.Menu,
-                            contentDescription = "القائمة"
+
+            state.hasError && !state.hasContent -> {
+                ErrorState(
+                    modifier = Modifier.fillMaxSize(),
+                    title = "تعذر تحميل لوحة التحكم",
+                    message = state.errorMessage ?: "حدث خطأ غير متوقع",
+                    details = "تحقق من الاتصال ثم أعد المحاولة.",
+                    retryText = "إعادة المحاولة",
+                    onRetry = { onEvent(DashboardUiEvent.Retry) },
+                    style = ErrorStateStyle.FullScreen,
+                )
+            }
+
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = AppDimens.Layout.screenPadding),
+                    verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium),
+                ) {
+                    item {
+                        AppTopBar(
+                            title = "لوحة التحكم",
+                            subtitle = state.lastUpdatedAtMillis?.let { formatLastUpdated(it) },
+                            actions = {
+                                TextButton(onClick = { onEvent(DashboardUiEvent.Refresh) }) {
+                                    Text(text = "تحديث")
+                                }
+                            },
                         )
                     }
-                    IconButton(onClick = onRefresh) {
-                        Icon(
-                            imageVector = Icons.Filled.Refresh,
-                            contentDescription = "تحديث"
+
+                    if (state.isReadOnlyMode || !state.canUsePaidFeatures) {
+                        item {
+                            SubscriptionWarningBanner(
+                                modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding),
+                                title = "وضع محدود",
+                                message = "بعض الميزات غير متاحة في الوضع الحالي.",
+                                actionText = "عرض الاشتراك",
+                                onActionClick = { onEvent(DashboardUiEvent.NavigateToReports) },
+                                onDismissClick = null,
+                                visible = true,
+                                showIcon = true,
+                                backgroundColor = WarningContainer,
+                                contentColor = TextPrimaryColor,
+                                subtitleColor = TextSecondaryColor,
+                            )
+                        }
+                    }
+
+                    if (state.hasError) {
+                        item {
+                            ErrorState(
+                                modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding),
+                                title = "هناك مشكلة في التحديث",
+                                message = state.errorMessage ?: "حدث خطأ غير متوقع",
+                                details = "تم الاحتفاظ بالبيانات الحالية.",
+                                retryText = "إعادة المحاولة",
+                                dismissText = "إغلاق",
+                                onRetry = { onEvent(DashboardUiEvent.Retry) },
+                                onDismiss = null,
+                                style = ErrorStateStyle.Card,
+                            )
+                        }
+                    }
+
+                    item {
+                        PeriodSelector(
+                            selected = state.selectedPeriod,
+                            onSelected = { onEvent(DashboardUiEvent.ChangePeriod(it)) },
+                            modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding),
                         )
+                    }
+
+                    item {
+                        DashboardHeroCard(
+                            currencyCode = state.currencyCode,
+                            netAmount = state.netAmount,
+                            totalSalesAmount = state.totalSalesAmount,
+                            totalExpensesAmount = state.totalExpensesAmount,
+                            modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding),
+                        )
+                    }
+
+                    item {
+                        MetricsGrid(
+                            state = state,
+                            modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding),
+                        )
+                    }
+
+                    if (state.recentSales.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "أحدث المبيعات",
+                                subtitle = "آخر العمليات المسجلة",
+                                actionText = "عرض الكل",
+                                onActionClick = { onEvent(DashboardUiEvent.NavigateToSales) },
+                                modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding),
+                            )
+                        }
+                        items(state.recentSales.take(5)) { sale ->
+                            RecentItemCard(
+                                label = "مبيعة",
+                                title = sale.safeDashboardTitle(),
+                                subtitle = sale.safeDashboardSubtitle(),
+                                trailing = sale.safeDashboardAmount(),
+                                accentColor = IncomeColor,
+                                accentContainer = IncomeContainer,
+                                onClick = sale.safeDashboardId()?.let { id ->
+                                    { onEvent(DashboardUiEvent.OnSaleClick(id)) }
+                                },
+                                modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding),
+                            )
+                        }
+                    }
+
+                    if (state.recentExpenses.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "أحدث المصروفات",
+                                subtitle = "المصاريف المضافة مؤخرًا",
+                                actionText = "عرض الكل",
+                                onActionClick = { onEvent(DashboardUiEvent.NavigateToExpenses) },
+                                modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding),
+                            )
+                        }
+                        items(state.recentExpenses.take(5)) { expense ->
+                            RecentItemCard(
+                                label = "مصروف",
+                                title = expense.safeDashboardTitle(),
+                                subtitle = expense.safeDashboardSubtitle(),
+                                trailing = expense.safeDashboardAmount(),
+                                accentColor = ErrorColor,
+                                accentContainer = ErrorContainer,
+                                onClick = expense.safeDashboardId()?.let { id ->
+                                    { onEvent(DashboardUiEvent.OnExpenseClick(id)) }
+                                },
+                                modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding),
+                            )
+                        }
+                    }
+
+                    if (state.recentReports.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "أحدث التقارير",
+                                subtitle = "مؤشرات وتحليلات جاهزة للمراجعة",
+                                actionText = "عرض الكل",
+                                onActionClick = { onEvent(DashboardUiEvent.NavigateToReports) },
+                                modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding),
+                            )
+                        }
+                        items(state.recentReports.take(5)) { report ->
+                            RecentItemCard(
+                                label = "تقرير",
+                                title = report.safeDashboardTitle(),
+                                subtitle = report.safeDashboardSubtitle(),
+                                trailing = report.safeDashboardAmount(),
+                                accentColor = InfoColor,
+                                accentContainer = InfoContainer,
+                                onClick = report.safeDashboardId()?.let { id ->
+                                    { onEvent(DashboardUiEvent.OnReportClick(id)) }
+                                },
+                                modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding),
+                            )
+                        }
+                    }
+
+                    if (state.recentTransactions.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "آخر الحركات المالية",
+                                subtitle = "المدفوعات والمعاملات الحديثة",
+                                actionText = "عرض الكل",
+                                onActionClick = { onEvent(DashboardUiEvent.NavigateToExpenses) },
+                                modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding),
+                            )
+                        }
+                        items(state.recentTransactions.take(5)) { transaction ->
+                            RecentItemCard(
+                                label = "معاملة",
+                                title = transaction.safeDashboardTitle(),
+                                subtitle = transaction.safeDashboardSubtitle(),
+                                trailing = transaction.safeDashboardAmount(),
+                                accentColor = WarningColor,
+                                accentContainer = WarningContainer,
+                                onClick = transaction.safeDashboardId()?.let { id ->
+                                    { onEvent(DashboardUiEvent.OnTransactionClick(id)) }
+                                },
+                                modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding),
+                            )
+                        }
                     }
                 }
-            )
-        }
 
-        if (state.isReadOnlyMode) {
-            item {
-                ModeBanner(
-                    title = "وضع القراءة فقط",
-                    message = "تم تقييد بعض العمليات الحساسة لحماية الجلسة."
-                )
-            }
-        }
-
-        if (!state.errorMessage.isNullOrBlank()) {
-            item {
-                ErrorState(
-                    modifier = Modifier.padding(
-                        horizontal = AppDimens.Layout.screenPadding,
-                        vertical = AppDimens.Spacing.medium
-                    ),
-                    message = state.errorMessage,
-                    title = "تنبيه",
-                    details = "يمكنك الاستمرار بالبيانات المعروضة أو إعادة المحاولة.",
-                    retryText = "إعادة المحاولة",
-                    onRetry = onRefresh,
-                    style = ErrorStateStyle.Inline
-                )
-            }
-        }
-
-        item {
-            Column(
-                modifier = Modifier.padding(AppDimens.Layout.screenPadding),
-                verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.large)
-            ) {
-                PeriodSelector(
-                    selectedPeriod = state.selectedPeriod,
-                    onPeriodChange = onPeriodChange
-                )
-
-                SummaryHeaderCard(state = state)
-
-                SectionHeader(title = "المؤشرات السريعة")
-                MetricGrid(state = state)
-
-                SectionHeader(title = "الحركة الأخيرة")
-            }
-        }
-
-        item {
-            RecentSalesSection(
-                items = state.recentSales,
-                onItemClick = onSaleClick
-            )
-        }
-
-        item {
-            RecentExpensesSection(
-                items = state.recentExpenses,
-                onItemClick = onExpenseClick
-            )
-        }
-
-        item {
-            RecentReportsSection(
-                items = state.recentReports,
-                onItemClick = onReportClick
-            )
-        }
-
-        item {
-            RecentTransactionsSection(
-                items = state.recentTransactions,
-                onItemClick = onTransactionClick
-            )
-        }
-
-        item {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(AppDimens.Layout.screenPadding)
-            ) {
-                OutlinedButton(
-                    onClick = onNavigateToSales,
-                    modifier = Modifier.weight(1f)
-                ) { Text("المبيعات") }
-
-                OutlinedButton(
-                    onClick = onNavigateToExpenses,
-                    modifier = Modifier.weight(1f)
-                ) { Text("المصاريف") }
-
-                OutlinedButton(
-                    onClick = onNavigateToReports,
-                    modifier = Modifier.weight(1f)
-                ) { Text("التقارير") }
-            }
-        }
-
-        item {
-            if (state.lastUpdatedAtMillis != null) {
-                Text(
-                    text = "آخر تحديث: ${formatTime(state.lastUpdatedAtMillis)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(
-                        horizontal = AppDimens.Layout.screenPadding,
-                        vertical = AppDimens.Spacing.small
+                if (state.isLoading || state.isRefreshing) {
+                    LoadingIndicator(
+                        modifier = Modifier.fillMaxSize(),
+                        title = if (state.isRefreshing) "جارٍ التحديث" else "جارٍ التحميل",
+                        message = if (state.isRefreshing) "يتم تحديث البيانات الحالية" else "يتم جلب البيانات الآن",
+                        centered = true,
                     )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PeriodSelector(
+    selected: DashboardPeriod,
+    onSelected: (DashboardPeriod) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val periods = remember {
+        listOf(
+            DashboardPeriod.Today,
+            DashboardPeriod.Week,
+            DashboardPeriod.Month,
+            DashboardPeriod.Year,
+            DashboardPeriod.AllTime,
+        )
+    }
+
+    Column(modifier = modifier) {
+        Text(
+            text = "الفترة الزمنية",
+            style = AppTypography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.semantics { heading() },
+        )
+        Spacer(modifier = Modifier.height(AppDimens.Spacing.small))
+        Row(horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)) {
+            periods.forEach { period ->
+                FilterChip(
+                    selected = selected == period,
+                    onClick = { onSelected(period) },
+                    label = { Text(text = period.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                    shape = AppShapeTokens.chip,
                 )
             }
-
-            Spacer(modifier = Modifier.height(AppDimens.Spacing.large))
         }
     }
 }
 
 @Composable
-private fun DashboardDrawerSheet(
+private fun DashboardHeroCard(
+    currencyCode: String,
+    netAmount: BigDecimal,
+    totalSalesAmount: BigDecimal,
+    totalExpensesAmount: BigDecimal,
     modifier: Modifier = Modifier,
-    onClose: () -> Unit,
-    onNavigateToAccounting: (() -> Unit)?,
-    onNavigateToCustomers: (() -> Unit)?,
-    onNavigateToExpenses: (() -> Unit)?,
-    onNavigateToInventory: (() -> Unit)?,
-    onNavigateToPayments: (() -> Unit)?,
-    onNavigateToPurchases: (() -> Unit)?,
-    onNavigateToReports: (() -> Unit)?,
-    onNavigateToReturns: (() -> Unit)?,
-    onNavigateToSales: (() -> Unit)?,
-    onNavigateToSecurity: (() -> Unit)?,
-    onNavigateToSettings: (() -> Unit)?,
-    onNavigateToSubscription: (() -> Unit)?,
-    onNavigateToSuppliers: (() -> Unit)?,
-    onLogoutClick: (() -> Unit)?
 ) {
-    val drawerItems = listOf(
-        DrawerMenuItem("المحاسبة", Icons.Filled.AccountBalance, onNavigateToAccounting),
-        DrawerMenuItem("العملاء", Icons.Filled.People, onNavigateToCustomers),
-        DrawerMenuItem("المصاريف", Icons.Filled.ReceiptLong, onNavigateToExpenses),
-        DrawerMenuItem("المخزون", Icons.Filled.Inventory2, onNavigateToInventory),
-        DrawerMenuItem("المدفوعات", Icons.Filled.Payments, onNavigateToPayments),
-        DrawerMenuItem("المشتريات", Icons.Filled.Storefront, onNavigateToPurchases),
-        DrawerMenuItem("التقارير", Icons.Filled.Description, onNavigateToReports),
-        DrawerMenuItem("المرتجعات", Icons.Filled.Replay, onNavigateToReturns),
-        DrawerMenuItem("المبيعات", Icons.Filled.ShoppingCart, onNavigateToSales),
-        DrawerMenuItem("الأمان", Icons.Filled.Security, onNavigateToSecurity),
-        DrawerMenuItem("الإعدادات", Icons.Filled.Settings, onNavigateToSettings),
-        DrawerMenuItem("الاشتراكات", Icons.Filled.Payments, onNavigateToSubscription),
-        DrawerMenuItem("الموردين", Icons.Filled.Storefront, onNavigateToSuppliers)
-    )
-
-    Surface(
-        modifier = modifier
-            .fillMaxWidth(0.86f)
-            .fillMaxHeight()
-            .statusBarsPadding()
-            .navigationBarsPadding(),
-        tonalElevation = AppDimens.Elevation.high,
-        shape = RoundedCornerShape(
-            topStart = AppDimens.Radius.large,
-            bottomStart = AppDimens.Radius.large
-        ),
-        color = MaterialTheme.colorScheme.surface
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = AppShapeTokens.card,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.medium),
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .padding(AppDimens.Layout.screenPadding),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-        ) {
-            DrawerHeader(onClose = onClose)
-
-            Divider(color = MaterialTheme.colorScheme.outlineVariant)
-
-            DrawerSectionTitle(text = "الانتقال السريع")
-
-            drawerItems.forEach { item ->
-                DashboardDrawerRow(
-                    title = item.title,
-                    icon = item.icon,
-                    onClick = item.onClick,
-                    onClose = onClose
-                )
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            Divider(color = MaterialTheme.colorScheme.outlineVariant)
-
-            DashboardDrawerRow(
-                title = "تسجيل الخروج",
-                icon = Icons.Filled.PowerSettingsNew,
-                accentColor = ErrorColor,
-                destructive = true,
-                onClick = onLogoutClick,
-                onClose = onClose
-            )
-        }
-    }
-}
-
-@Composable
-private fun DrawerHeader(onClose: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(60.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = RoundedCornerShape(AppDimens.Radius.large)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Menu,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            IconButton(onClick = onClose) {
-                Icon(
-                    imageVector = Icons.Filled.ArrowBack,
-                    contentDescription = "إغلاق القائمة"
-                )
-            }
-        }
-
-        Text(
-            text = "القائمة الجانبية",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-
-        Text(
-            text = "تنقل عربي أنيق وسريع بين أقسام التطبيق",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun DrawerSectionTitle(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        fontWeight = FontWeight.SemiBold
-    )
-}
-
-@Composable
-private fun DashboardDrawerRow(
-    title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: (() -> Unit)?,
-    onClose: () -> Unit,
-    accentColor: androidx.compose.ui.graphics.Color = BrandPrimary,
-    destructive: Boolean = false
-) {
-    val rowColor = if (destructive) ErrorColor else accentColor
-    val rowModifier = Modifier
-        .fillMaxWidth()
-        .clickable(enabled = onClick != null) {
-            onClick?.invoke()
-            onClose()
-        }
-
-    Card(
-        modifier = rowModifier,
-        shape = RoundedCornerShape(AppDimens.Radius.medium),
-        colors = CardDefaults.cardColors(
-            containerColor = if (destructive) {
-                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(AppDimens.Layout.screenPadding),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(
-                        color = rowColor.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(AppDimens.Radius.medium)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = rowColor
-                )
-            }
-
-            Text(
-                text = title,
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun ModeBanner(title: String, message: String) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = AppDimens.Layout.screenPadding),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        shape = RoundedCornerShape(AppDimens.Radius.medium)
-    ) {
-        Column(
-            modifier = Modifier.padding(AppDimens.Layout.screenPadding),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.extraSmall)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-    }
-}
-
-@Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding)
-    )
-}
-
-@Composable
-private fun PeriodSelector(
-    selectedPeriod: DashboardPeriod,
-    onPeriodChange: (DashboardPeriod) -> Unit
-) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text(
-            text = "الفترة الزمنية",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            DashboardPeriod.entries.forEach { period ->
-                FilterChip(
-                    selected = selectedPeriod == period,
-                    onClick = { onPeriodChange(period) },
-                    label = { Text(period.arabicLabel()) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SummaryHeaderCard(state: DashboardUiState) {
-    ElevatedCard(
-        shape = RoundedCornerShape(AppDimens.Radius.large),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = AppDimens.Elevation.low)
-    ) {
-        Column(
-            modifier = Modifier.padding(AppDimens.Layout.screenPadding),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
+            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium),
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(AppDimens.Radius.large)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.AccountBalance,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "ملخص الأداء",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = "صافي الأداء",
+                        style = AppTypography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
+                    Spacer(modifier = Modifier.height(AppDimens.Spacing.extraSmall))
                     Text(
-                        text = "قراءة سريعة ومرتبة للمؤشرات الأساسية",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "ملخص مالي مباشر لآخر البيانات المتاحة",
+                        style = AppTypography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                AmountPill(
+                    amount = netAmount,
+                    currencyCode = currencyCode,
+                    accentColor = IncomeColor,
+                    accentContainer = IncomeContainer,
+                )
             }
 
             Divider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-            ) {
-                SummaryStatCard(
+            Row(horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)) {
+                MiniAmountCard(
+                    title = "إجمالي المبيعات",
+                    amount = totalSalesAmount,
+                    currencyCode = currencyCode,
+                    accentColor = IncomeColor,
+                    accentContainer = IncomeContainer,
                     modifier = Modifier.weight(1f),
-                    title = "المبيعات",
-                    value = state.salesCount.toString(),
-                    icon = Icons.Filled.ShoppingCart,
-                    accentColor = IncomeColor
                 )
-                SummaryStatCard(
+                MiniAmountCard(
+                    title = "إجمالي المصروفات",
+                    amount = totalExpensesAmount,
+                    currencyCode = currencyCode,
+                    accentColor = ErrorColor,
+                    accentContainer = ErrorContainer,
                     modifier = Modifier.weight(1f),
-                    title = "المصروفات",
-                    value = state.expensesCount.toString(),
-                    icon = Icons.Filled.ReceiptLong,
-                    accentColor = ExpenseColor
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-            ) {
-                SummaryStatCard(
-                    modifier = Modifier.weight(1f),
-                    title = "المدفوعات",
-                    value = state.paymentTransactionsCount.toString(),
-                    icon = Icons.Filled.Payments,
-                    accentColor = InfoColor
-                )
-                SummaryStatCard(
-                    modifier = Modifier.weight(1f),
-                    title = "التقارير",
-                    value = state.reportsCount.toString(),
-                    icon = Icons.Filled.Description,
-                    accentColor = WarningColor
                 )
             }
         }
@@ -766,92 +410,46 @@ private fun SummaryHeaderCard(state: DashboardUiState) {
 }
 
 @Composable
-private fun SummaryStatCard(
-    title: String,
-    value: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    accentColor: androidx.compose.ui.graphics.Color,
-    modifier: Modifier = Modifier
+private fun MetricsGrid(
+    state: DashboardUiState,
+    modifier: Modifier = Modifier,
 ) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(AppDimens.Radius.large),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.low)
-    ) {
-        Row(
-            modifier = Modifier.padding(AppDimens.Layout.screenPadding),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(
-                        color = accentColor.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(AppDimens.Radius.medium)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = accentColor
-                )
-            }
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)) {
+            MetricCard(
+                title = "المبيعات",
+                value = state.salesCount.toString(),
+                subtitle = formatMoney(state.totalSalesAmount, state.currencyCode),
+                accentColor = IncomeColor,
+                accentContainer = IncomeContainer,
+                modifier = Modifier.weight(1f),
+            )
+            MetricCard(
+                title = "المصروفات",
+                value = state.expensesCount.toString(),
+                subtitle = formatMoney(state.totalExpensesAmount, state.currencyCode),
+                accentColor = ErrorColor,
+                accentContainer = ErrorContainer,
+                modifier = Modifier.weight(1f),
+            )
         }
-    }
-}
-
-@Composable
-private fun MetricGrid(state: DashboardUiState) {
-    val items = listOf(
-        DashboardMetricUi("إيراد اليوم", formatMoney(state.totalSalesAmount, state.currencyCode), IncomeColor),
-        DashboardMetricUi("إجمالي المصروفات", formatMoney(state.totalExpensesAmount, state.currencyCode), ExpenseColor),
-        DashboardMetricUi("صافي الرصيد", formatMoney(state.netAmount, state.currencyCode), InfoColor),
-        DashboardMetricUi("المدفوع", formatMoney(state.totalPaidAmount, state.currencyCode), IncomeColor),
-        DashboardMetricUi("المتبقي", formatMoney(state.totalPendingAmount, state.currencyCode), WarningColor),
-        DashboardMetricUi("الوضع", if (state.isReadOnlyMode) "قراءة فقط" else "نشط", if (state.isReadOnlyMode) WarningColor else IncomeColor)
-    )
-
-    Column(verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)) {
-        items.chunked(2).forEach { rowItems ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
-            ) {
-                rowItems.forEach { item ->
-                    MetricCard(
-                        modifier = Modifier.weight(1f),
-                        title = item.title,
-                        value = item.value,
-                        accentColor = item.accentColor
-                    )
-                }
-                if (rowItems.size == 1) {
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-            }
+        Row(horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)) {
+            MetricCard(
+                title = "التقارير",
+                value = state.reportsCount.toString(),
+                subtitle = if (state.canAccessReports) "مسموح بالوصول" else "الوصول محدود",
+                accentColor = InfoColor,
+                accentContainer = InfoContainer,
+                modifier = Modifier.weight(1f),
+            )
+            MetricCard(
+                title = "المدفوعات",
+                value = state.paymentTransactionsCount.toString(),
+                subtitle = "مدفوع: ${state.paidPaymentsCount} · معلّق: ${state.pendingPaymentsCount}",
+                accentColor = WarningColor,
+                accentContainer = WarningContainer,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
@@ -860,225 +458,50 @@ private fun MetricGrid(state: DashboardUiState) {
 private fun MetricCard(
     title: String,
     value: String,
-    accentColor: androidx.compose.ui.graphics.Color,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(AppDimens.Radius.large),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.low)
-    ) {
-        Column(
-            modifier = Modifier.padding(AppDimens.Layout.screenPadding),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .background(
-                        color = accentColor.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(AppDimens.Radius.medium)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .background(accentColor, shape = RoundedCornerShape(AppDimens.Radius.round))
-                )
-            }
-
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun RecentSalesSection(
-    items: List<Sale>,
-    onItemClick: (String) -> Unit
-) {
-    RecentSection(
-        title = "المبيعات الأخيرة",
-        emptyText = "لا توجد مبيعات حديثة",
-        icon = Icons.Filled.ShoppingCart,
-        items = items.take(4),
-        onItemClick = onItemClick,
-        itemRenderer = { sale ->
-            sale.safeTitle("عملية بيع") to sale.safeSubtitle("تفاصيل البيع")
-        }
-    )
-}
-
-@Composable
-private fun RecentExpensesSection(
-    items: List<Expense>,
-    onItemClick: (String) -> Unit
-) {
-    RecentSection(
-        title = "المصروفات الأخيرة",
-        emptyText = "لا توجد مصروفات حديثة",
-        icon = Icons.Filled.ReceiptLong,
-        items = items.take(4),
-        onItemClick = onItemClick,
-        itemRenderer = { expense ->
-            expense.safeTitle("مصروف") to expense.safeSubtitle("تفاصيل المصروف")
-        }
-    )
-}
-
-@Composable
-private fun RecentReportsSection(
-    items: List<Report>,
-    onItemClick: (String) -> Unit
-) {
-    RecentSection(
-        title = "التقارير الأخيرة",
-        emptyText = "لا توجد تقارير حديثة",
-        icon = Icons.Filled.Description,
-        items = items.take(4),
-        onItemClick = onItemClick,
-        itemRenderer = { report ->
-            report.safeTitle("تقرير") to report.safeSubtitle("تفاصيل التقرير")
-        }
-    )
-}
-
-@Composable
-private fun RecentTransactionsSection(
-    items: List<PaymentTransaction>,
-    onItemClick: (String) -> Unit
-) {
-    RecentSection(
-        title = "المدفوعات الأخيرة",
-        emptyText = "لا توجد مدفوعات حديثة",
-        icon = Icons.Filled.Payments,
-        items = items.take(4),
-        onItemClick = onItemClick,
-        itemRenderer = { transaction ->
-            transaction.safeTitle("حركة مالية") to transaction.safeSubtitle("تفاصيل الحركة")
-        }
-    )
-}
-
-@Composable
-private fun <T : Any> RecentSection(
-    title: String,
-    emptyText: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    items: List<T>,
-    onItemClick: (String) -> Unit,
-    itemRenderer: (T) -> Pair<String, String>
-) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small),
-        modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding)
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-
-        if (items.isEmpty()) {
-            OutlinedCard(shape = RoundedCornerShape(AppDimens.Radius.large)) {
-                Text(
-                    text = emptyText,
-                    modifier = Modifier.padding(AppDimens.Layout.screenPadding),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)) {
-                items.forEach { item ->
-                    val (itemTitle, itemSubtitle) = itemRenderer(item)
-                    RecentRow(
-                        title = itemTitle,
-                        subtitle = itemSubtitle,
-                        leadingIcon = icon,
-                        onClick = { item.extractId()?.let(onItemClick) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RecentRow(
-    title: String,
     subtitle: String,
-    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: (() -> Unit)? = null
+    accentColor: Color,
+    accentContainer: Color,
+    modifier: Modifier = Modifier,
 ) {
-    val rowModifier = if (onClick != null) {
-        Modifier.clickable { onClick() }
-    } else {
-        Modifier
-    }
-
     Card(
-        modifier = rowModifier.fillMaxWidth(),
-        shape = RoundedCornerShape(AppDimens.Radius.large),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.none)
+        modifier = modifier.fillMaxWidth(),
+        shape = AppShapeTokens.card,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.low),
     ) {
         Row(
-            modifier = Modifier.padding(AppDimens.Layout.screenPadding),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Layout.screenPadding),
+            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = RoundedCornerShape(AppDimens.Radius.medium)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = leadingIcon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-
+            MetricAccentDot(
+                title = title,
+                accentColor = accentColor,
+                accentContainer = accentContainer,
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
+                    style = AppTypography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(AppDimens.Spacing.extraSmall))
+                Text(
+                    text = value,
+                    style = AppTypography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
                 )
+                Spacer(modifier = Modifier.height(AppDimens.Spacing.extraSmall))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = AppTypography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -1086,107 +509,249 @@ private fun RecentRow(
 }
 
 @Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(horizontal = AppDimens.Layout.screenPadding)
-    )
-}
-
-private data class DashboardMetricUi(
-    val title: String,
-    val value: String,
-    val accentColor: androidx.compose.ui.graphics.Color
-)
-
-private data class DrawerMenuItem(
-    val title: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val onClick: (() -> Unit)?
-)
-
-private fun dashboardSubtitle(state: DashboardUiState): String {
-    return when {
-        state.isRefreshing -> "جاري التحديث"
-        state.isLoading -> "جاري التحميل"
-        state.hasError -> "توجد مشكلة مؤقتة"
-        else -> "جاهزة للعرض"
-    }
-}
-
-private fun DashboardPeriod.arabicLabel(): String {
-    return when (this) {
-        DashboardPeriod.Today -> "اليوم"
-        DashboardPeriod.Week -> "الأسبوع"
-        DashboardPeriod.Month -> "الشهر"
-        DashboardPeriod.Year -> "السنة"
-        DashboardPeriod.AllTime -> "الكل"
-    }
-}
-
-private fun formatMoney(value: BigDecimal, currencyCode: String): String {
-    val cleanValue = value.stripTrailingZeros().toPlainString()
-    return if (currencyCode.isBlank()) cleanValue else "$cleanValue $currencyCode"
-}
-
-private fun formatTime(epochMillis: Long): String {
-    return runCatching {
-        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(epochMillis))
-    }.getOrElse { epochMillis.toString() }
-}
-
-private fun Any.safeTitle(fallback: String): String {
-    return readString("title", "name", "label", "code", "number") ?: fallback
-}
-
-private fun Any.safeSubtitle(fallback: String): String {
-    val amount = readString("amount", "total", "value")
-    val date = readString("createdAt", "date", "time", "updatedAt", "timestamp")
-    return when {
-        !amount.isNullOrBlank() && !date.isNullOrBlank() -> "$amount • $date"
-        !amount.isNullOrBlank() -> amount
-        !date.isNullOrBlank() -> date
-        else -> fallback
-    }
-}
-
-private fun <T : Any> T.extractId(): String? {
-    return readString("id", "saleId", "expenseId", "reportId", "transactionId")
-}
-
-private fun Any.readString(vararg names: String): String? {
-    for (name in names) {
-        val value = runCatching {
-            val candidates = listOf(
-                name,
-                "get${name.capitalizeSafe()}",
-                "is${name.capitalizeSafe()}"
+private fun MiniAmountCard(
+    title: String,
+    amount: BigDecimal,
+    currencyCode: String,
+    accentColor: Color,
+    accentContainer: Color,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier,
+        shape = AppShapeTokens.card,
+        colors = CardDefaults.cardColors(containerColor = accentContainer),
+        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.none),
+    ) {
+        Column(
+            modifier = Modifier.padding(AppDimens.Spacing.medium),
+            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.extraSmall),
+        ) {
+            Text(
+                text = title,
+                style = AppTypography.labelMedium,
+                color = accentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-
-            var resolved: Any? = null
-            for (methodName in candidates) {
-                val method = javaClass.methods.firstOrNull { it.name == methodName && it.parameterCount == 0 }
-                if (method != null) {
-                    resolved = method.invoke(this)
-                    break
-                }
-            }
-            resolved
-        }.getOrNull()
-
-        when (value) {
-            is String -> if (value.isNotBlank()) return value
-            is Number, is Boolean -> return value.toString()
+            Text(
+                text = formatMoney(amount, currencyCode),
+                style = AppTypography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
-    return null
 }
 
-private fun String.capitalizeSafe(): String {
-    return replaceFirstChar { first ->
-        if (first.isLowerCase()) first.titlecase(Locale.ROOT) else first.toString()
+@Composable
+private fun AmountPill(
+    amount: BigDecimal,
+    currencyCode: String,
+    accentColor: Color,
+    accentContainer: Color,
+) {
+    Surface(
+        shape = AppShapeTokens.buttonPill,
+        color = accentContainer,
+        contentColor = accentColor,
+    ) {
+        Text(
+            text = formatMoney(amount, currencyCode),
+            style = AppTypography.titleSmall,
+            modifier = Modifier.padding(horizontal = AppDimens.Spacing.medium, vertical = 10.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
+}
+
+@Composable
+private fun MetricAccentDot(
+    title: String,
+    accentColor: Color,
+    accentContainer: Color,
+) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(accentContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = title.take(1),
+            style = AppTypography.titleMedium,
+            color = accentColor,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun SectionHeader(
+    title: String,
+    subtitle: String,
+    actionText: String,
+    onActionClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = AppTypography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics { heading() },
+            )
+            Spacer(modifier = Modifier.height(AppDimens.Spacing.extraSmall))
+            Text(
+                text = subtitle,
+                style = AppTypography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        TextButton(onClick = onActionClick) {
+            Text(text = actionText)
+        }
+    }
+}
+
+@Composable
+private fun RecentItemCard(
+    label: String,
+    title: String,
+    subtitle: String,
+    trailing: String?,
+    accentColor: Color,
+    accentContainer: Color,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .semantics {
+                role = Role.Button
+                contentDescription = "$label $title"
+            },
+        shape = AppShapeTokens.card,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.Elevation.low),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Layout.screenPadding),
+            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(accentContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label.take(1),
+                    style = AppTypography.titleMedium,
+                    color = accentColor,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = AppTypography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(modifier = Modifier.height(AppDimens.Spacing.extraSmall))
+                Text(
+                    text = subtitle,
+                    style = AppTypography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (!trailing.isNullOrBlank()) {
+                Text(
+                    text = trailing,
+                    style = AppTypography.labelLarge,
+                    color = accentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+private fun DashboardPeriod.toArabicLabel(): String = when (this) {
+    DashboardPeriod.Today -> "اليوم"
+    DashboardPeriod.Week -> "الأسبوع"
+    DashboardPeriod.Month -> "الشهر"
+    DashboardPeriod.Year -> "السنة"
+    DashboardPeriod.AllTime -> "الكل"
+}
+
+private val DashboardPeriod.label: String
+    get() = toArabicLabel()
+
+private fun formatMoney(amount: BigDecimal?, currencyCode: String): String {
+    val safeAmount = amount ?: BigDecimal.ZERO
+    val formatter = NumberFormat.getCurrencyInstance(Locale.getDefault())
+    return runCatching {
+        formatter.currency = Currency.getInstance(currencyCode)
+        formatter.maximumFractionDigits = 2
+        formatter.minimumFractionDigits = 0
+        formatter.format(safeAmount)
+    }.getOrElse {
+        "$safeAmount $currencyCode"
+    }
+}
+
+private fun formatLastUpdated(lastUpdatedAtMillis: Long): String {
+    val relative = DateUtils.getRelativeTimeSpanString(
+        lastUpdatedAtMillis,
+        System.currentTimeMillis(),
+        DateUtils.MINUTE_IN_MILLIS,
+    )
+    return "آخر تحديث منذ $relative"
+}
+
+private fun Sale.safeDashboardTitle(): String = toStringSafe("Sale")
+private fun Expense.safeDashboardTitle(): String = toStringSafe("Expense")
+private fun Report.safeDashboardTitle(): String = toStringSafe("Report")
+private fun PaymentTransaction.safeDashboardTitle(): String = toStringSafe("Transaction")
+
+private fun Sale.safeDashboardSubtitle(): String = toStringSafe()
+private fun Expense.safeDashboardSubtitle(): String = toStringSafe()
+private fun Report.safeDashboardSubtitle(): String = toStringSafe()
+private fun PaymentTransaction.safeDashboardSubtitle(): String = toStringSafe()
+
+private fun Sale.safeDashboardAmount(): String? = null
+private fun Expense.safeDashboardAmount(): String? = null
+private fun Report.safeDashboardAmount(): String? = null
+private fun PaymentTransaction.safeDashboardAmount(): String? = null
+
+private fun Sale.safeDashboardId(): String? = null
+private fun Expense.safeDashboardId(): String? = null
+private fun Report.safeDashboardId(): String? = null
+private fun PaymentTransaction.safeDashboardId(): String? = null
+
+private fun Any.toStringSafe(prefix: String? = null): String {
+    val raw = toString().trim().ifBlank { this::class.simpleName ?: "عنصر" }
+    return prefix?.let { "$it: $raw" } ?: raw
 }

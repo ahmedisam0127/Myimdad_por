@@ -1,48 +1,54 @@
 package com.myimdad_por.ui.features.sales
 
 import com.myimdad_por.core.base.BaseViewModel
+import com.myimdad_por.core.dispatchers.AppDispatchers
+import com.myimdad_por.core.dispatchers.DefaultAppDispatchers
 import com.myimdad_por.domain.model.Customer
 import com.myimdad_por.domain.model.PaymentMethod
 import com.myimdad_por.domain.model.Product
 import com.myimdad_por.domain.model.Sale
 import com.myimdad_por.domain.model.SaleItem
+import com.myimdad_por.domain.repository.SalesRepository
 import com.myimdad_por.domain.usecase.GetCustomersUseCase
-import com.myimdad_por.domain.usecase.ProcessSaleRequest
-import com.myimdad_por.domain.usecase.ProcessSaleUseCase
-import dagger.hilt.android.lifecycle.HiltViewModel
 import java.math.BigDecimal
-import java.math.RoundingMode
+import java.util.Locale
 import javax.inject.Inject
-import kotlin.math.max
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 
-private const val DEFAULT_EMPLOYEE_ID = "system"
-private const val DEFAULT_STOCK_LOCATION = "main"
-private const val DEFAULT_ERROR_MESSAGE = "حدث خطأ غير متوقع"
-private const val SEARCH_DEBOUNCE_MS = 300L
-private val ZERO_MONEY: BigDecimal = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
-
-@HiltViewModel
 class SalesViewModel @Inject constructor(
+    private val salesRepository: SalesRepository,
     private val getCustomersUseCase: GetCustomersUseCase,
-    private val processSaleUseCase: ProcessSaleUseCase
-) : BaseViewModel<SalesUiState>() {
+    dispatchers: AppDispatchers = DefaultAppDispatchers
+) : BaseViewModel<SalesUiState>(dispatchers) {
 
+    private var salesCollectorJob: Job? = null
+    private var customersCollectorJob: Job? = null
     private var searchJob: Job? = null
 
+    private var cachedSales: List<Sale> = emptyList()
+    private var cachedCustomers: List<Customer> = emptyList()
+
     init {
-        setSuccess(SalesUiState())
-        loadCustomers()
+        setSuccess(SalesUiState(isLoading = true))
+        startCollectors()
+        loadSnapshot(forceRefresh = true)
     }
 
     fun onEvent(event: SalesUiEvent) {
         when (event) {
-            SalesUiEvent.Load -> loadCustomers()
-            SalesUiEvent.Refresh -> loadCustomers(forceRefresh = true)
-            SalesUiEvent.Retry -> loadCustomers()
+            SalesUiEvent.Load -> loadSnapshot(forceRefresh = true)
+            SalesUiEvent.Refresh -> refresh()
+            SalesUiEvent.Retry -> {
+                clearErrorState()
+                loadSnapshot(forceRefresh = true)
+            }
 
-            SalesUiEvent.ClearError -> clearErrors()
+            SalesUiEvent.ClearError -> clearErrorState()
 
             is SalesUiEvent.ChangeSearchQuery -> updateSearchQuery(event.query)
             is SalesUiEvent.SelectCustomer -> mutateState { copy(selectedCustomer = event.customer) }
@@ -50,74 +56,105 @@ class SalesViewModel @Inject constructor(
             is SalesUiEvent.SelectSale -> selectSale(event.saleId)
 
             is SalesUiEvent.AddProductToDraft -> addProductToDraft(event.product, event.quantity)
-            is SalesUiEvent.AddDraftItem -> upsertDraftItem(event.item)
+            is SalesUiEvent.AddDraftItem -> addDraftItem(event.item)
             is SalesUiEvent.UpdateDraftItem -> updateDraftItem(event.item)
             is SalesUiEvent.RemoveDraftItem -> removeDraftItem(event.itemId)
             SalesUiEvent.ClearDraftItems -> mutateState { copy(draftItems = emptyList()) }
 
-            is SalesUiEvent.UpdateInvoiceNumber -> mutateState {
-                copy(
-                    invoiceNumber = event.invoiceNumber.trim(),
-                    validationErrors = emptyMap(),
-                    errorMessage = null
-                )
-            }
-
-            is SalesUiEvent.UpdateNote -> mutateState {
-                copy(
-                    note = event.note,
-                    validationErrors = emptyMap(),
-                    errorMessage = null
-                )
-            }
-
+            is SalesUiEvent.UpdateInvoiceNumber -> mutateState { copy(invoiceNumber = event.invoiceNumber.trim()) }
+            is SalesUiEvent.UpdateNote -> mutateState { copy(note = event.note) }
             is SalesUiEvent.UpdatePaidAmount -> updatePaidAmount(event.amount)
 
             SalesUiEvent.SubmitSale -> submitSale()
             SalesUiEvent.SaveDraft -> saveDraft()
             SalesUiEvent.DeleteSelectedSale -> deleteSelectedSale()
             SalesUiEvent.ResetForm -> resetForm()
-
             SalesUiEvent.NavigateBack -> Unit
         }
     }
 
-    private fun loadCustomers(forceRefresh: Boolean = false) {
-        launch(dispatcher = dispatchers.io) {
-            mutateState {
-                copy(
-                    isLoading = !forceRefresh,
-                    isRefreshing = forceRefresh,
-                    errorMessage = null,
-                    validationErrors = emptyMap()
-                )
-            }
+    override fun onCleared() {
+        salesCollectorJob?.cancel()
+        customersCollectorJob?.cancel()
+        searchJob?.cancel()
+        super.onCleared()
+    }
 
-            runCatching {
-                val query = currentSalesState().searchQuery.trim()
-                if (query.isBlank()) {
-                    getCustomersUseCase()
-                } else {
-                    getCustomersUseCase.search(query)
+    private fun startCollectors() {
+        if (salesCollectorJob?.isActive == true && customersCollectorJob?.isActive == true) return
+
+        salesCollectorJob = launch(dispatchers.io) {
+            salesRepository.observeAllSales().collect { sales ->
+                cachedSales = sales
+                if (currentQuery().isBlank()) {
+                    syncLiveSnapshot()
                 }
-            }.onSuccess { customers ->
-                mutateState {
-                    copy(
-                        isLoading = false,
-                        isRefreshing = false,
-                        customers = customers,
-                        errorMessage = null
+            }
+        }
+
+        customersCollectorJob = launch(dispatchers.io) {
+            getCustomersUseCase.observeAll().collect { customers ->
+                cachedCustomers = customers
+                if (currentQuery().isBlank()) {
+                    syncLiveSnapshot()
+                }
+            }
+        }
+    }
+
+    private fun loadSnapshot(forceRefresh: Boolean = false) {
+        mutateState {
+            copy(
+                isLoading = true,
+                isRefreshing = forceRefresh,
+                isSubmitting = false,
+                errorMessage = null,
+                validationErrors = emptyMap()
+            )
+        }
+
+        launch(dispatchers.io) {
+            try {
+                val query = currentQuery()
+
+                val snapshot = if (query.isBlank()) {
+                    val sales = salesRepository.observeAllSales().first()
+                    val customers = getCustomersUseCase.observeAll().first()
+                    cachedSales = sales
+                    cachedCustomers = customers
+                    Snapshot(sales = sales, customers = customers)
+                } else {
+                    Snapshot(
+                        sales = salesRepository.searchSales(query),
+                        customers = getCustomersUseCase.search(query)
                     )
                 }
-            }.onFailure { throwable ->
+
+                applySnapshot(
+                    sales = snapshot.sales,
+                    customers = snapshot.customers,
+                    keepDraft = true
+                )
+            } catch (throwable: Throwable) {
+                if (throwable is CancellationException) throw throwable
                 mutateState {
                     copy(
                         isLoading = false,
                         isRefreshing = false,
-                        errorMessage = throwable.toUserMessage()
+                        isSubmitting = false,
+                        errorMessage = throwable.message ?: DEFAULT_ERROR_MESSAGE
                     )
                 }
             }
+        }
+    }
+
+    private fun refresh() {
+        val query = currentQuery()
+        if (query.isBlank()) {
+            loadSnapshot(forceRefresh = true)
+        } else {
+            scheduleSearch(query, isRefresh = true)
         }
     }
 
@@ -133,35 +170,43 @@ class SalesViewModel @Inject constructor(
         }
 
         searchJob?.cancel()
-        searchJob = launch(dispatcher = dispatchers.io) {
-            delay(SEARCH_DEBOUNCE_MS)
+        if (normalized.isBlank()) {
+            syncLiveSnapshot()
+        } else {
+            scheduleSearch(normalized, isRefresh = false)
+        }
+    }
 
-            mutateState {
-                copy(
-                    isLoading = true,
-                    errorMessage = null
-                )
-            }
+    private fun scheduleSearch(query: String, isRefresh: Boolean) {
+        searchJob?.cancel()
+        searchJob = launch(dispatchers.io) {
+            try {
+                if (!isRefresh) delay(250L)
 
-            runCatching {
-                if (normalized.isBlank()) {
-                    getCustomersUseCase()
-                } else {
-                    getCustomersUseCase.search(normalized)
-                }
-            }.onSuccess { customers ->
                 mutateState {
                     copy(
+                        isRefreshing = true,
                         isLoading = false,
-                        customers = customers,
                         errorMessage = null
                     )
                 }
-            }.onFailure { throwable ->
+
+                val sales = salesRepository.searchSales(query)
+                val customers = getCustomersUseCase.search(query)
+
+                applySnapshot(
+                    sales = sales,
+                    customers = customers,
+                    keepDraft = true
+                )
+            } catch (throwable: Throwable) {
+                if (throwable is CancellationException) throw throwable
                 mutateState {
                     copy(
                         isLoading = false,
-                        errorMessage = throwable.toUserMessage()
+                        isRefreshing = false,
+                        isSubmitting = false,
+                        errorMessage = throwable.message ?: DEFAULT_ERROR_MESSAGE
                     )
                 }
             }
@@ -169,82 +214,60 @@ class SalesViewModel @Inject constructor(
     }
 
     private fun selectSale(saleId: String) {
-        val normalizedId = saleId.trim()
-        if (normalizedId.isBlank()) return
+        if (saleId.isBlank()) return
 
-        val state = currentSalesState()
-        val sale = state.sales.firstOrNull { it.id == normalizedId }
+        launch(dispatchers.io) {
+            try {
+                val sale = salesRepository.getSaleById(saleId)
+                if (sale == null) {
+                    mutateState {
+                        copy(
+                            errorMessage = "لم يتم العثور على عملية البيع المطلوبة",
+                            selectedSale = null
+                        )
+                    }
+                    return@launch
+                }
 
-        if (sale == null) {
-            mutateState {
-                copy(
-                    errorMessage = "لم يتم العثور على الفاتورة المحددة",
-                    validationErrors = mapOf("sale" to "لم يتم العثور على الفاتورة المحددة")
-                )
+                val selectedCustomer = sale.customerId
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { getCustomersUseCase.getById(it) }
+
+                mutateState {
+                    copy(
+                        selectedSale = sale,
+                        selectedCustomer = selectedCustomer ?: this.selectedCustomer,
+                        invoiceNumber = sale.invoiceNumber,
+                        note = sale.note.orEmpty(),
+                        draftItems = sale.items,
+                        validationErrors = emptyMap(),
+                        errorMessage = null
+                    )
+                }
+            } catch (throwable: Throwable) {
+                if (throwable is CancellationException) throw throwable
+                mutateState {
+                    copy(
+                        errorMessage = throwable.message ?: "تعذر تحميل عملية البيع",
+                        isLoading = false,
+                        isRefreshing = false,
+                        isSubmitting = false
+                    )
+                }
             }
-            return
-        }
-
-        val customer = sale.customerId?.let { customerId ->
-            state.customers.firstOrNull { it.id == customerId }
-        }
-
-        mutateState {
-            copy(
-                selectedSale = sale,
-                selectedCustomer = customer,
-                invoiceNumber = sale.invoiceNumber,
-                note = sale.note.orEmpty(),
-                draftItems = sale.items,
-                paidAmount = sale.paidAmount.money(),
-                validationErrors = emptyMap(),
-                errorMessage = null
-            )
         }
     }
 
     private fun addProductToDraft(product: Product, quantity: Int) {
-        val safeQuantity = max(1, quantity)
-
-        val item = SaleItem(
-            productId = product.normalizedBarcode,
-            productName = product.effectiveName,
-            unit = product.unitOfMeasure,
-            quantity = BigDecimal.valueOf(safeQuantity.toLong()),
-            unitPrice = product.price.money(),
-            taxAmount = ZERO_MONEY,
-            discountAmount = ZERO_MONEY,
-            isReturn = false,
-            note = null
-        )
-
-        upsertDraftItem(item)
+        if (quantity <= 0) return
+        addDraftItem(product.toDraftItem(quantity))
     }
 
-    private fun upsertDraftItem(item: SaleItem) {
+    private fun addDraftItem(item: SaleItem) {
         mutateState {
-            val updatedItems = draftItems.toMutableList()
-            val existingIndex = updatedItems.indexOfFirst {
-                it.productId == item.productId &&
-                    it.unit == item.unit &&
-                    it.isReturn == item.isReturn &&
-                    it.unitPrice == item.unitPrice &&
-                    it.taxAmount == item.taxAmount &&
-                    it.discountAmount == item.discountAmount
-            }
-
-            if (existingIndex >= 0) {
-                val existing = updatedItems[existingIndex]
-                updatedItems[existingIndex] = existing.copy(
-                    quantity = (existing.quantity + item.quantity).money()
-                )
-            } else {
-                updatedItems.add(item)
-            }
-
             copy(
-                draftItems = updatedItems,
-                validationErrors = emptyMap(),
+                draftItems = draftItems.mergeDraftItem(item),
+                validationErrors = validationErrors - DRAFT_ITEMS_KEY,
                 errorMessage = null
             )
         }
@@ -253,110 +276,91 @@ class SalesViewModel @Inject constructor(
     private fun updateDraftItem(item: SaleItem) {
         mutateState {
             copy(
-                draftItems = draftItems.map { existing ->
-                    if (existing.id == item.id) item else existing
-                },
-                validationErrors = emptyMap(),
+                draftItems = draftItems.replaceDraftItem(item),
+                validationErrors = validationErrors - DRAFT_ITEMS_KEY,
                 errorMessage = null
             )
         }
     }
 
     private fun removeDraftItem(itemId: String) {
-        val normalizedId = itemId.trim()
-        if (normalizedId.isBlank()) return
+        if (itemId.isBlank()) return
 
         mutateState {
             copy(
-                draftItems = draftItems.filterNot { it.id == normalizedId },
-                validationErrors = emptyMap(),
-                errorMessage = null
+                draftItems = draftItems.filterNot { draftItemKey(it) == itemId },
+                validationErrors = validationErrors - DRAFT_ITEMS_KEY
             )
         }
     }
 
-    private fun updatePaidAmount(amountText: String) {
-        val parsedAmount = amountText
-            .trim()
-            .replace(",", "")
+    private fun updatePaidAmount(amount: String) {
+        val parsed = amount.trim()
+            .replace(',', '.')
             .toBigDecimalOrNull()
-            ?.money()
-            ?: ZERO_MONEY
+            ?.takeIf { it >= BigDecimal.ZERO }
+            ?: BigDecimal.ZERO
 
-        mutateState {
-            copy(
-                paidAmount = parsedAmount,
-                validationErrors = emptyMap(),
-                errorMessage = null
-            )
-        }
+        mutateState { copy(paidAmount = parsed) }
     }
 
     private fun submitSale() {
-        val state = currentSalesState()
-        if (state.isSubmitting) return
+        val state = currentUiState()
 
-        val validationErrors = validateForSubmit(state)
-        if (validationErrors.isNotEmpty()) {
+        if (state.draftItems.isEmpty()) {
             mutateState {
                 copy(
-                    validationErrors = validationErrors,
-                    errorMessage = validationErrors.values.firstOrNull()
+                    validationErrors = validationErrors + (DRAFT_ITEMS_KEY to "أضف صنفًا واحدًا على الأقل"),
+                    errorMessage = "لا يمكن إرسال عملية بيع فارغة"
                 )
             }
             return
         }
 
-        launch(dispatcher = dispatchers.io) {
+        val sale = state.selectedSale ?: run {
             mutateState {
                 copy(
-                    isSubmitting = true,
-                    errorMessage = null,
-                    validationErrors = emptyMap()
+                    validationErrors = validationErrors + (SALE_KEY to "اختر عملية بيع أو أنشئ مسودة قبل الإرسال"),
+                    errorMessage = "لا توجد عملية بيع جاهزة للإرسال"
                 )
             }
+            return
+        }
 
-            val sale = buildSale(state)
-            val request = ProcessSaleRequest(
-                sale = sale,
-                defaultStockLocation = DEFAULT_STOCK_LOCATION,
-                itemBarcodes = state.draftItems.associate { it.productId to it.productId },
-                itemLocations = emptyMap(),
-                createInvoice = true,
-                issueInvoiceNow = true,
-                allowReturnItems = state.draftItems.any { it.isReturn },
-                invoicePartyId = state.selectedCustomer?.id,
-                invoicePartyName = state.selectedCustomer?.displayName,
-                invoicePartyTaxNumber = state.selectedCustomer?.taxNumber,
-                invoiceNotes = state.note.trim().takeIf { it.isNotBlank() },
-                invoiceTermsAndConditions = null
-            )
+        val updatedSale = sale.copy(
+            items = state.draftItems,
+            invoiceNumber = state.invoiceNumber.ifBlank { sale.invoiceNumber },
+            note = state.note.ifBlank { sale.note.orEmpty() }
+        )
 
-            runCatching {
-                processSaleUseCase(request).getOrThrow()
-            }.onSuccess { result ->
-                val savedSale = result.savedSale
+        launch(dispatchers.io) {
+            try {
+                mutateState { copy(isSubmitting = true, errorMessage = null) }
+
+                val savedSale = salesRepository.updateSale(updatedSale).getOrThrow()
+
+                cachedSales = cachedSales.upsert(savedSale)
 
                 mutateState {
                     copy(
-                        sales = listOf(savedSale) + sales.filterNot { it.id == savedSale.id },
+                        sales = cachedSales,
                         selectedSale = savedSale,
                         draftItems = emptyList(),
-                        paidAmount = ZERO_MONEY,
                         note = "",
-                        invoiceNumber = "",
-                        selectedPaymentMethod = null,
-                        selectedCustomer = null,
+                        invoiceNumber = savedSale.invoiceNumber,
                         isSubmitting = false,
-                        validationErrors = emptyMap(),
-                        errorMessage = null
+                        isLoading = false,
+                        isRefreshing = false,
+                        errorMessage = null,
+                        validationErrors = emptyMap()
                     )
                 }
-            }.onFailure { throwable ->
+            } catch (throwable: Throwable) {
+                if (throwable is CancellationException) throw throwable
                 mutateState {
                     copy(
                         isSubmitting = false,
-                        errorMessage = throwable.toUserMessage()
+                        errorMessage = throwable.message ?: "تعذر إتمام عملية البيع"
                     )
                 }
             }
@@ -364,50 +368,102 @@ class SalesViewModel @Inject constructor(
     }
 
     private fun saveDraft() {
-        mutateState {
-            copy(
-                errorMessage = null,
-                validationErrors = emptyMap()
-            )
+        val state = currentUiState()
+        val sale = state.selectedSale ?: run {
+            mutateState {
+                copy(errorMessage = "الحفظ كمسودة يتطلب تحديد عملية بيع موجودة للتعديل")
+            }
+            return
+        }
+
+        val draftSale = sale.copy(
+            items = state.draftItems,
+            invoiceNumber = state.invoiceNumber.ifBlank { sale.invoiceNumber },
+            note = state.note.ifBlank { sale.note.orEmpty() }
+        )
+
+        launch(dispatchers.io) {
+            try {
+                mutateState { copy(isSubmitting = true, errorMessage = null) }
+
+                val saved = salesRepository.updateSale(draftSale).getOrThrow()
+                cachedSales = cachedSales.upsert(saved)
+
+                mutateState {
+                    copy(
+                        sales = cachedSales,
+                        selectedSale = saved,
+                        isSubmitting = false,
+                        errorMessage = null
+                    )
+                }
+            } catch (throwable: Throwable) {
+                if (throwable is CancellationException) throw throwable
+                mutateState {
+                    copy(
+                        isSubmitting = false,
+                        errorMessage = throwable.message ?: "تعذر حفظ المسودة"
+                    )
+                }
+            }
         }
     }
 
     private fun deleteSelectedSale() {
-        val sale = currentSalesState().selectedSale ?: return
+        val saleId = currentUiState().selectedSale?.id?.takeIf { it.isNotBlank() } ?: run {
+            mutateState { copy(errorMessage = "لا توجد عملية بيع محددة للحذف") }
+            return
+        }
 
-        mutateState {
-            copy(
-                sales = sales.filterNot { it.id == sale.id },
-                selectedSale = null,
-                validationErrors = emptyMap(),
-                errorMessage = null
-            )
+        launch(dispatchers.io) {
+            try {
+                mutateState { copy(isSubmitting = true, errorMessage = null) }
+
+                salesRepository.deleteSale(saleId).getOrThrow()
+
+                cachedSales = cachedSales.filterNot { it.id == saleId }
+
+                mutateState {
+                    copy(
+                        sales = cachedSales,
+                        selectedSale = null,
+                        draftItems = emptyList(),
+                        isSubmitting = false,
+                        errorMessage = null
+                    )
+                }
+            } catch (throwable: Throwable) {
+                if (throwable is CancellationException) throw throwable
+                mutateState {
+                    copy(
+                        isSubmitting = false,
+                        errorMessage = throwable.message ?: "تعذر حذف عملية البيع"
+                    )
+                }
+            }
         }
     }
 
     private fun resetForm() {
-        searchJob?.cancel()
         mutateState {
             copy(
-                isLoading = false,
-                isRefreshing = false,
-                isSubmitting = false,
                 selectedCustomer = null,
                 selectedPaymentMethod = null,
                 selectedSale = null,
                 invoiceNumber = "",
-                searchQuery = "",
                 note = "",
                 draftItems = emptyList(),
-                paidAmount = ZERO_MONEY,
+                paidAmount = BigDecimal.ZERO,
                 validationErrors = emptyMap(),
-                errorMessage = null
+                errorMessage = null,
+                isLoading = false,
+                isRefreshing = false,
+                isSubmitting = false
             )
         }
-        loadCustomers()
     }
 
-    private fun clearErrors() {
+    private fun clearErrorState() {
         mutateState {
             copy(
                 errorMessage = null,
@@ -416,69 +472,174 @@ class SalesViewModel @Inject constructor(
         }
     }
 
-    private fun validateForSubmit(state: SalesUiState): Map<String, String> {
-        val errors = linkedMapOf<String, String>()
+    private fun syncLiveSnapshot() {
+        val state = currentUiState()
 
-        if (state.draftItems.isEmpty()) {
-            errors["draftItems"] = "أضف صنفاً واحداً على الأقل"
+        val refreshedSelectedSale = state.selectedSale?.let { selected ->
+            cachedSales.firstOrNull { it.id == selected.id } ?: selected
         }
 
-        if (state.selectedPaymentMethod == null) {
-            errors["paymentMethod"] = "اختر طريقة الدفع"
-        }
+        val refreshedSelectedCustomer = refreshedSelectedSale?.customerId
+            ?.takeIf { it.isNotBlank() }
+            ?.let { customerId ->
+                cachedCustomers.firstOrNull { it.id == customerId } ?: state.selectedCustomer
+            } ?: state.selectedCustomer
 
-        if (state.totalAmount <= ZERO_MONEY) {
-            errors["totalAmount"] = "إجمالي الفاتورة يجب أن يكون أكبر من الصفر"
+        mutateState {
+            copy(
+                sales = cachedSales,
+                customers = cachedCustomers,
+                selectedSale = refreshedSelectedSale,
+                selectedCustomer = refreshedSelectedCustomer,
+                isLoading = false,
+                isRefreshing = false,
+                errorMessage = null
+            )
         }
-
-        if (state.invoiceNumber.isBlank()) {
-            errors["invoiceNumber"] = "رقم الفاتورة مطلوب"
-        }
-
-        if (state.remainingAmount > ZERO_MONEY && !state.canUseCredit) {
-            errors["credit"] = "العميل غير مؤهل للبيع الآجل أو يوجد رصيد غير مغطى"
-        }
-
-        if (state.remainingAmount > ZERO_MONEY && state.selectedCustomer == null) {
-            errors["customer"] = "اختر عميلاً صالحاً قبل البيع الآجل"
-        }
-
-        return errors
     }
 
-    private fun buildSale(state: SalesUiState): Sale {
-        return Sale(
-            invoiceNumber = state.invoiceNumber.trim(),
-            customerId = state.selectedCustomer?.id,
-            employeeId = state.selectedSale?.employeeId ?: DEFAULT_EMPLOYEE_ID,
-            items = state.draftItems,
-            paidAmount = state.paidAmount.money(),
-            note = state.note.trim().takeIf { it.isNotBlank() }
-        )
+    private fun applySnapshot(
+        sales: List<Sale>,
+        customers: List<Customer>,
+        keepDraft: Boolean
+    ) {
+        val state = currentUiState()
+
+        val refreshedSelectedSale = state.selectedSale?.let { selected ->
+            sales.firstOrNull { it.id == selected.id } ?: selected
+        }
+
+        val refreshedSelectedCustomer = refreshedSelectedSale?.customerId
+            ?.takeIf { it.isNotBlank() }
+            ?.let { customerId ->
+                customers.firstOrNull { it.id == customerId } ?: state.selectedCustomer
+            } ?: state.selectedCustomer
+
+        mutateState {
+            copy(
+                sales = sales,
+                customers = customers,
+                selectedSale = refreshedSelectedSale,
+                selectedCustomer = refreshedSelectedCustomer,
+                draftItems = if (keepDraft) draftItems else emptyList(),
+                isLoading = false,
+                isRefreshing = false,
+                isSubmitting = false,
+                errorMessage = null
+            )
+        }
     }
 
-    private fun currentSalesState(): SalesUiState {
+    private fun currentQuery(): String {
+        return currentUiState().searchQuery.trim()
+    }
+
+    private fun currentUiState(): SalesUiState {
         return currentData ?: SalesUiState()
     }
 
-    private fun mutateState(transform: SalesUiState.() -> SalesUiState) {
-        val current = currentSalesState()
-        setSuccess(current.transform())
+    private inline fun mutateState(reducer: SalesUiState.() -> SalesUiState) {
+        setSuccess(currentUiState().reducer())
     }
-}
 
-private fun BigDecimal.money(): BigDecimal = setScale(2, RoundingMode.HALF_UP)
-
-private fun String.toBigDecimalOrNull(): BigDecimal? {
-    return runCatching { trim().toBigDecimal() }.getOrNull()
-}
-
-private fun Throwable.toUserMessage(): String {
-    val msg = message?.trim().orEmpty()
-    return when {
-        msg.isNotBlank() -> msg
-        this is IllegalArgumentException -> "البيانات المدخلة غير صحيحة"
-        this is IllegalStateException -> "تعذر إكمال العملية الحالية"
-        else -> DEFAULT_ERROR_MESSAGE
+    private fun List<Sale>.upsert(updatedSale: Sale): List<Sale> {
+        val index = indexOfFirst { it.id == updatedSale.id }
+        return if (index >= 0) {
+            toMutableList().apply { this[index] = updatedSale }.toList()
+        } else {
+            this + updatedSale
+        }
     }
+
+    private fun List<SaleItem>.mergeDraftItem(newItem: SaleItem): List<SaleItem> {
+        val key = draftItemKey(newItem)
+        val index = indexOfFirst { draftItemKey(it) == key }
+        if (index < 0) return this + newItem
+
+        val existing = this[index]
+        val merged = existing.copy(
+            quantity = existing.quantity + newItem.quantity
+        )
+
+        return toMutableList().apply { this[index] = merged }.toList()
+    }
+
+    private fun List<SaleItem>.replaceDraftItem(newItem: SaleItem): List<SaleItem> {
+        val key = draftItemKey(newItem)
+        val index = indexOfFirst { draftItemKey(it) == key }
+        return if (index >= 0) {
+            toMutableList().apply { this[index] = newItem }.toList()
+        } else {
+            this + newItem
+        }
+    }
+
+    private fun Product.toDraftItem(quantity: Int): SaleItem {
+        val productId = reflectText("id", "productId", "barcode")
+        val productName = reflectText("effectiveName", "displayName", "name", "title")
+        val unitPrice = reflectBigDecimal("price", "salePrice", "unitPrice")
+        // السطر 587: استخدمنا ?: لإعطاء قيمة افتر
+        val unit = reflectUnit("unitOfMeasure", "unit") ?: com.myimdad_por.domain.model.UnitOfMeasure.DEFAULT
+
+        return SaleItem(
+            id = "${productId}_$quantity",
+            productId = productId,
+            productName = productName,
+            unit = unit,
+            quantity = BigDecimal.valueOf(quantity.toLong()),
+            unitPrice = unitPrice,
+            taxAmount = BigDecimal.ZERO,
+            discountAmount = BigDecimal.ZERO,
+            note = null,
+            isReturn = false
+        )
+    }
+
+    private fun draftItemKey(item: SaleItem): String {
+        return item.id.ifBlank { item.productId }
+    }
+
+    private fun Any.reflectText(vararg names: String): String {
+        return reflectAny(*names)?.toString().orEmpty()
+    }
+
+    private fun Any.reflectBigDecimal(vararg names: String): BigDecimal {
+        return when (val value = reflectAny(*names)) {
+            is BigDecimal -> value
+            is Number -> BigDecimal.valueOf(value.toDouble())
+            else -> value?.toString()?.toBigDecimalOrNull() ?: BigDecimal.ZERO
+        }
+    }
+
+    private fun Any.reflectUnit(vararg names: String): com.myimdad_por.domain.model.UnitOfMeasure? {
+        return reflectAny(*names) as? com.myimdad_por.domain.model.UnitOfMeasure
+    }
+
+    private fun Any.reflectAny(vararg names: String): Any? {
+        val clazz = javaClass
+
+        names.forEach { name ->
+            val getter = clazz.methods.firstOrNull { method ->
+                method.parameterCount == 0 &&
+                    (method.name == name || method.name == "get${name.replaceFirstChar { ch -> ch.uppercase(Locale.getDefault()) }}")
+            }
+
+            if (getter != null) {
+                return runCatching { getter.invoke(this) }.getOrNull()
+            }
+        }
+
+        return null
+    }
+
+    companion object {
+        private const val DEFAULT_ERROR_MESSAGE = "حدث خطأ غير متوقع"
+        private const val DRAFT_ITEMS_KEY = "draftItems"
+        private const val SALE_KEY = "sale"
+    }
+
+    private data class Snapshot(
+        val sales: List<Sale>,
+        val customers: List<Customer>
+    )
 }

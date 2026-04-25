@@ -1,25 +1,18 @@
 package com.myimdad_por.ui.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
@@ -30,12 +23,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.myimdad_por.ui.theme.AppDimens
-import com.myimdad_por.ui.theme.AppShapeTokens
-import com.myimdad_por.ui.theme.AppTypography
-import com.myimdad_por.ui.theme.ErrorColor
-import com.myimdad_por.ui.theme.TextPrimaryColor
-import com.myimdad_por.ui.theme.TextSecondaryColor
+import com.myimdad_por.ui.theme.*
 
 enum class AppTextFieldVariant {
     Filled,
@@ -47,21 +35,9 @@ enum class AppTextFieldSize(
     val verticalPadding: Dp,
     val textStyle: TextStyle
 ) {
-    Small(
-        minHeight = 48.dp,
-        verticalPadding = 10.dp,
-        textStyle = AppTypography.bodyMedium
-    ),
-    Medium(
-        minHeight = 56.dp,
-        verticalPadding = 12.dp,
-        textStyle = AppTypography.bodyLarge
-    ),
-    Large(
-        minHeight = 64.dp,
-        verticalPadding = 14.dp,
-        textStyle = AppTypography.bodyLarge
-    )
+    Small(48.dp, 10.dp, AppTypography.bodyMedium),
+    Medium(56.dp, 12.dp, AppTypography.bodyLarge),
+    Large(64.dp, 14.dp, AppTypography.bodyLarge)
 }
 
 @Composable
@@ -90,32 +66,62 @@ fun AppTextField(
     contentDescription: String? = null
 ) {
     val isError = !errorText.isNullOrBlank()
-    val visualTransformation = when {
-        isPassword && !passwordVisible -> PasswordVisualTransformation()
-        else -> VisualTransformation.None
+
+    val visualTransformation = remember(isPassword, passwordVisible) {
+        if (isPassword && !passwordVisible) {
+            PasswordVisualTransformation()
+        } else {
+            VisualTransformation.None
+        }
+    }
+
+    // ✅ لا تكسر modifier القادم من الخارج
+    val fieldModifier = modifier
+        .fillMaxWidth()
+        .heightIn(min = size.minHeight)
+        .semantics {
+            if (!contentDescription.isNullOrBlank()) {
+                this.contentDescription = contentDescription
+            }
+            if (isError && !errorText.isNullOrBlank()) {
+                error(errorText)
+            }
+        }
+
+    // ✅ trailingIcon احترافي بدون lambda فارغة
+    val resolvedTrailingIcon: (@Composable (() -> Unit))? = when {
+        isPassword -> {
+            {
+                val clickAction = onPasswordVisibilityChange
+                TextButton(
+                    onClick = { clickAction?.invoke(!passwordVisible) }
+                ) {
+                    Text(
+                        text = if (passwordVisible) "إخفاء" else "إظهار",
+                        style = AppTypography.labelLarge
+                    )
+                }
+            }
+        }
+
+        trailingIcon != null -> trailingIcon
+
+        else -> null
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
+
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = size.minHeight)
-                .semantics {
-                    if (!contentDescription.isNullOrBlank()) {
-                        this.contentDescription = contentDescription
-                    }
-                    if (isError && !errorText.isNullOrBlank()) {
-                        error(errorText)
-                    }
-                },
+            modifier = fieldModifier,
             enabled = enabled,
             readOnly = readOnly,
             singleLine = singleLine,
             maxLines = maxLines,
             minLines = minLines,
             textStyle = size.textStyle.copy(color = TextPrimaryColor),
+
             label = label?.let { text ->
                 {
                     Text(
@@ -125,6 +131,7 @@ fun AppTextField(
                     )
                 }
             },
+
             placeholder = placeholder?.let { text ->
                 {
                     Text(
@@ -136,34 +143,15 @@ fun AppTextField(
                     )
                 }
             },
+
             leadingIcon = leadingIcon,
-            trailingIcon = {
-                when {
-                    isPassword -> {
-                        val clickAction = onPasswordVisibilityChange
-                        TextButton(
-                            onClick = {
-                                if (clickAction != null) {
-                                    clickAction(!passwordVisible)
-                                }
-                            }
-                        ) {
-                            Text(
-                                text = if (passwordVisible) "إخفاء" else "إظهار",
-                                style = AppTypography.labelLarge
-                            )
-                        }
-                    }
+            trailingIcon = resolvedTrailingIcon,
 
-                    trailingIcon != null -> trailingIcon()
-
-                    else -> Unit
-                }
-            },
             visualTransformation = visualTransformation,
             keyboardOptions = keyboardOptions,
             keyboardActions = keyboardActions,
             shape = AppShapeTokens.textField,
+
             colors = when (variant) {
                 AppTextFieldVariant.Filled -> OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
@@ -199,6 +187,7 @@ fun AppTextField(
                     disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                 )
             },
+
             isError = isError
         )
 
