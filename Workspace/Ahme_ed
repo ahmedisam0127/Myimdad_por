@@ -1,0 +1,2623 @@
+=== PROJECT FILES SUMMARY (MINIMIZED) ===
+Search Path: /storage/emulated/0/AndroidIDEProjects/Myimdad_por/app/src/main/java/com/myimdad_por
+
+------------------------------
+FILE: BigDecimalExtensions.kt
+------------------------------
+package com.myimdad_por.core.utils
+import java.math.BigDecimal
+import java.math.RoundingMode
+import java.text.NumberFormat
+import java.util.Currency
+import java.util.Locale
+private const val DEFAULT_SCALE = 2
+private const val PERCENT_INTERMEDIATE_SCALE = 4
+private val ZERO: BigDecimal = BigDecimal.ZERO
+private val ONE_HUNDRED: BigDecimal = BigDecimal("100")
+fun BigDecimal?.orZero(): BigDecimal = this ?: ZERO
+fun BigDecimal.isZero(): Boolean = compareTo(ZERO) == 0
+fun BigDecimal.isNotZero(): Boolean = compareTo(ZERO) != 0
+fun BigDecimal.isPositive(): Boolean = compareTo(ZERO) > 0
+fun BigDecimal.isNegative(): Boolean = compareTo(ZERO) < 0
+fun BigDecimal.isGreaterThan(other: BigDecimal): Boolean = compareTo(other) > 0
+fun BigDecimal.isLessThan(other: BigDecimal): Boolean = compareTo(other) < 0
+fun BigDecimal.isAtLeast(other: BigDecimal): Boolean = compareTo(other) >= 0
+fun BigDecimal.isAtMost(other: BigDecimal): Boolean = compareTo(other) <= 0
+fun BigDecimal.absScaled(scale: Int = DEFAULT_SCALE): BigDecimal =
+    abs().setScale(scale, RoundingMode.HALF_UP)
+fun BigDecimal.roundTo(
+    scale: Int = DEFAULT_SCALE,
+    roundingMode: RoundingMode = RoundingMode.HALF_UP
+): BigDecimal = setScale(scale, roundingMode)
+fun BigDecimal.floorTo(scale: Int = DEFAULT_SCALE): BigDecimal =
+    setScale(scale, RoundingMode.DOWN)
+fun BigDecimal.ceilTo(scale: Int = DEFAULT_SCALE): BigDecimal =
+    setScale(scale, RoundingMode.UP)
+fun BigDecimal.safeDivide(
+    divisor: BigDecimal?,
+    scale: Int = DEFAULT_SCALE,
+    roundingMode: RoundingMode = RoundingMode.HALF_UP
+): BigDecimal {
+    val safeDivisor = divisor.orZero()
+    if (safeDivisor.isZero()) {
+        return ZERO.setScale(scale, roundingMode)
+    }
+    return divide(safeDivisor, scale, roundingMode)
+}
+fun BigDecimal.plusOrZero(other: BigDecimal?): BigDecimal = add(other.orZero())
+fun BigDecimal.minusOrZero(other: BigDecimal?): BigDecimal = subtract(other.orZero())
+fun BigDecimal.timesOrZero(other: BigDecimal?): BigDecimal = multiply(other.orZero())
+fun BigDecimal.minWith(other: BigDecimal): BigDecimal = if (this <= other) this else other
+fun BigDecimal.maxWith(other: BigDecimal): BigDecimal = if (this >= other) this else other
+fun BigDecimal.percentOf(
+    total: BigDecimal?,
+    scale: Int = DEFAULT_SCALE
+): BigDecimal {
+    val safeTotal = total.orZero()
+    if (safeTotal.isZero()) {
+        return ZERO.setScale(scale, RoundingMode.HALF_UP)
+    }
+    return multiply(ONE_HUNDRED)
+        .divide(safeTotal, scale + PERCENT_INTERMEDIATE_SCALE, RoundingMode.HALF_UP)
+        .setScale(scale, RoundingMode.HALF_UP)
+}
+fun BigDecimal.percentageOf(
+    base: BigDecimal?,
+    scale: Int = DEFAULT_SCALE
+): BigDecimal = percentOf(base, scale)
+fun BigDecimal.toPlainScaledString(scale: Int = DEFAULT_SCALE): String =
+    roundTo(scale).toPlainString()
+fun BigDecimal.toFormattedNumberString(
+    locale: Locale = Locale.getDefault(),
+    scale: Int = DEFAULT_SCALE
+): String {
+    val format = NumberFormat.getNumberInstance(locale)
+    format.minimumFractionDigits = scale
+    format.maximumFractionDigits = scale
+    return format.format(roundTo(scale))
+}
+fun BigDecimal.toCurrencyString(
+    locale: Locale = Locale.getDefault(),
+    currency: Currency? = null,
+    scale: Int = DEFAULT_SCALE
+): String {
+    val format = NumberFormat.getCurrencyInstance(locale)
+    if (currency != null) {
+        format.currency = currency
+    }
+    format.minimumFractionDigits = scale
+    format.maximumFractionDigits = scale
+    return format.format(roundTo(scale))
+}
+fun String?.toBigDecimalOrZero(): BigDecimal {
+    val raw = this?.trim().orEmpty()
+    if (raw.isEmpty()) return ZERO
+    return try {
+        BigDecimal(raw)
+    } catch (_: Exception) {
+        ZERO
+    }
+}
+fun Int.toBigDecimalValue(): BigDecimal = BigDecimal.valueOf(toLong())
+fun Long.toBigDecimalValue(): BigDecimal = BigDecimal.valueOf(this)
+fun Double.toBigDecimalValue(scale: Int = DEFAULT_SCALE): BigDecimal =
+    BigDecimal.valueOf(this).setScale(scale, RoundingMode.HALF_UP)
+fun Float.toBigDecimalValue(scale: Int = DEFAULT_SCALE): BigDecimal =
+    BigDecimal.valueOf(toDouble()).setScale(scale, RoundingMode.HALF_UP)
+fun Number.toBigDecimalValue(scale: Int = DEFAULT_SCALE): BigDecimal {
+    return when (this) {
+        is BigDecimal -> setScale(scale, RoundingMode.HALF_UP)
+        is Int -> BigDecimal.valueOf(toLong())
+        is Long -> BigDecimal.valueOf(this)
+        is Double -> BigDecimal.valueOf(this).setScale(scale, RoundingMode.HALF_UP)
+        is Float -> BigDecimal.valueOf(toDouble()).setScale(scale, RoundingMode.HALF_UP)
+        is Short -> BigDecimal.valueOf(toLong())
+        is Byte -> BigDecimal.valueOf(toLong())
+        else -> toString().toBigDecimalOrZero().setScale(scale, RoundingMode.HALF_UP)
+    }
+}
+
+------------------------------
+FILE: CurrencyFormatter.kt
+------------------------------
+package com.myimdad_por.core.utils
+import java.math.BigDecimal
+import java.math.RoundingMode
+import java.text.NumberFormat
+import java.text.ParsePosition
+import java.util.Currency
+import java.util.Locale
+object CurrencyFormatter {
+    private val DEFAULT_LOCALE: Locale = Locale("ar", "SD")
+    private val FALLBACK_LOCALE: Locale = Locale.ENGLISH
+    private val SDG: Currency = Currency.getInstance("SDG")
+    private const val DEFAULT_FRACTION = 2
+    fun formatSDG(
+        amount: BigDecimal?,
+        showSymbol: Boolean = true,
+        locale: Locale = DEFAULT_LOCALE
+    ): String {
+        return format(
+            amount = amount,
+            currency = SDG,
+            locale = locale,
+            showSymbol = showSymbol
+        )
+    }
+    fun format(
+        amount: BigDecimal?,
+        currency: Currency,
+        locale: Locale = DEFAULT_LOCALE,
+        showSymbol: Boolean = true,
+        fractionDigits: Int = currency.defaultFractionDigits.coerceAtLeast(DEFAULT_FRACTION)
+    ): String {
+        if (amount == null) return Constants.Ui.EMPTY_TEXT
+        val formatter = NumberFormat.getCurrencyInstance(locale).apply {
+            this.currency = currency
+            maximumFractionDigits = fractionDigits
+            minimumFractionDigits = fractionDigits
+            isGroupingUsed = true
+        }
+        val formatted = formatter.format(amount)
+        return if (showSymbol) {
+            formatted
+        } else {
+            formatted
+                .replace(currency.getSymbol(locale), "")
+                .trim()
+        }
+    }
+    fun formatPlain(
+        amount: BigDecimal?,
+        locale: Locale = DEFAULT_LOCALE,
+        fractionDigits: Int = DEFAULT_FRACTION
+    ): String {
+        if (amount == null) return Constants.Ui.EMPTY_TEXT
+        val formatter = NumberFormat.getNumberInstance(locale).apply {
+            maximumFractionDigits = fractionDigits
+            minimumFractionDigits = 0
+            isGroupingUsed = true
+        }
+        return formatter.format(amount)
+    }
+    fun parse(value: String?): BigDecimal? {
+        if (value.isNullOrBlank()) return null
+        val cleaned = value
+            .replace("ج.س", "")
+            .replace("SDG", "")
+            .trim()
+        return parseWithLocale(cleaned, DEFAULT_LOCALE)
+            ?: parseWithLocale(cleaned, FALLBACK_LOCALE)
+    }
+    private fun parseWithLocale(
+        value: String,
+        locale: Locale
+    ): BigDecimal? {
+        return try {
+            val formatter = NumberFormat.getNumberInstance(locale)
+            val position = ParsePosition(0)
+            val number = formatter.parse(value, position)
+            if (position.index != value.length) return null
+            number?.toString()?.toBigDecimalOrNull()
+        } catch (_: Exception) {
+            null
+        }
+    }
+    fun round(
+        amount: BigDecimal,
+        scale: Int = DEFAULT_FRACTION
+    ): BigDecimal {
+        return amount.setScale(scale, RoundingMode.HALF_EVEN)
+    }
+    fun fromDouble(value: Double?): BigDecimal? {
+        return value?.toBigDecimal()
+    }
+    fun zero(): BigDecimal = BigDecimal.ZERO.setScale(DEFAULT_FRACTION)
+    fun isZero(amount: BigDecimal?): Boolean {
+        return amount?.compareTo(BigDecimal.ZERO) == 0
+    }
+}
+
+------------------------------
+FILE: PaymentMethod.kt
+------------------------------
+package com.myimdad_por.domain.model
+import java.math.BigDecimal
+import java.util.UUID
+sealed class PaymentMethod(
+    open val id: String,
+    open val name: String,
+    open val type: PaymentMethodType,
+    open val providerName: String? = null,
+    open val requiresReference: Boolean,
+    open val extraFees: BigDecimal = BigDecimal.ZERO,
+    open val supportedCurrencies: Set<CurrencyCode> = setOf(CurrencyCode.SDG, CurrencyCode.EGP),
+    open val isActive: Boolean = true
+) {
+    init {
+        require(id.isNotBlank()) { "id cannot be blank" }
+        require(name.isNotBlank()) { "name cannot be blank" }
+        require(extraFees >= BigDecimal.ZERO) { "extraFees cannot be negative" }
+        require(supportedCurrencies.isNotEmpty()) { "supportedCurrencies cannot be empty" }
+        providerName?.let {
+            require(it.isNotBlank()) { "providerName cannot be blank when provided" }
+        }
+    }
+    val displayName: String
+        get() = when (this) {
+            is CASH -> "نقداً"
+            is BANK_TRANSFER -> "تحويل بنكي"
+            is WALLET -> "محفظة إلكترونية"
+            is POS -> "نقطة بيع (POS)"
+            is CHEQUE -> "شيك"
+            is Custom -> providerName ?: name
+        }
+    fun supportsCurrency(currencyCode: CurrencyCode): Boolean {
+        return currencyCode in supportedCurrencies
+    }
+    fun isElectronic(): Boolean {
+        return type != PaymentMethodType.CASH
+    }
+    object CASH : PaymentMethod(
+        id = "cash",
+        name = "Cash",
+        type = PaymentMethodType.CASH,
+        providerName = null,
+        requiresReference = false,
+        extraFees = BigDecimal.ZERO
+    )
+    object BANK_TRANSFER : PaymentMethod(
+        id = "bank_transfer",
+        name = "Bank Transfer",
+        type = PaymentMethodType.BANK_TRANSFER,
+        providerName = null,
+        requiresReference = true,
+        extraFees = BigDecimal.ZERO
+    )
+    object WALLET : PaymentMethod(
+        id = "wallet",
+        name = "Wallet",
+        type = PaymentMethodType.WALLET,
+        providerName = null,
+        requiresReference = true,
+        extraFees = BigDecimal.ZERO
+    )
+    object POS : PaymentMethod(
+        id = "pos",
+        name = "POS",
+        type = PaymentMethodType.POS,
+        providerName = null,
+        requiresReference = true,
+        extraFees = BigDecimal.ZERO
+    )
+    object CHEQUE : PaymentMethod(
+        id = "cheque",
+        name = "Cheque",
+        type = PaymentMethodType.CHEQUE,
+        providerName = null,
+        requiresReference = true,
+        extraFees = BigDecimal.ZERO
+    )
+    data class Custom(
+        override val id: String = UUID.randomUUID().toString(),
+        override val name: String,
+        override val type: PaymentMethodType,
+        override val providerName: String? = null,
+        override val requiresReference: Boolean = false,
+        override val extraFees: BigDecimal = BigDecimal.ZERO,
+        override val supportedCurrencies: Set<CurrencyCode> = setOf(CurrencyCode.SDG, CurrencyCode.EGP),
+        override val isActive: Boolean = true
+    ) : PaymentMethod(
+        id = id,
+        name = name,
+        type = type,
+        providerName = providerName,
+        requiresReference = requiresReference,
+        extraFees = extraFees,
+        supportedCurrencies = supportedCurrencies,
+        isActive = isActive
+    )
+    companion object {
+        fun values(): List<PaymentMethod> {
+            return listOf(CASH, BANK_TRANSFER, WALLET, POS, CHEQUE)
+        }
+    }
+}
+enum class PaymentMethodType {
+    CASH,
+    BANK_TRANSFER,
+    WALLET,
+    POS,
+    CHEQUE,
+    OTHER
+}
+enum class CurrencyCode(
+    val code: String,
+    val displayName: String,
+    val symbol: String,
+    val decimalPlaces: Int
+) {
+    SDG(
+        code = "SDG",
+        displayName = "جنيه سوداني",
+        symbol = "ج.س",
+        decimalPlaces = 2
+    ),
+    EGP(
+        code = "EGP",
+        displayName = "جنيه مصري",
+        symbol = "ج.م",
+        decimalPlaces = 2
+    )
+}
+
+------------------------------
+FILE: AppButton.kt
+------------------------------
+package com.myimdad_por.ui.components
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedButton
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.myimdad_por.ui.theme.AppDimens
+import com.myimdad_por.ui.theme.AppShapeTokens
+import com.myimdad_por.ui.theme.AppTypography
+import com.myimdad_por.ui.theme.ErrorColor
+import com.myimdad_por.ui.theme.InfoColor
+import com.myimdad_por.ui.theme.BrandPrimary
+enum class AppButtonVariant {
+    Primary,
+    Secondary,
+    Elevated,
+    Outlined,
+    Text,
+    Danger,
+    Info
+}
+enum class AppButtonSize(
+    val minHeight: Dp,
+    val horizontalPadding: Dp,
+    val iconSize: Dp,
+    val loadingSize: Dp
+) {
+    Small(
+        minHeight = 36.dp,
+        horizontalPadding = 14.dp,
+        iconSize = 16.dp,
+        loadingSize = 16.dp
+    ),
+    Medium(
+        minHeight = 48.dp,
+        horizontalPadding = 18.dp,
+        iconSize = 18.dp,
+        loadingSize = 18.dp
+    ),
+    Large(
+        minHeight = 56.dp,
+        horizontalPadding = 20.dp,
+        iconSize = 20.dp,
+        loadingSize = 20.dp
+    )
+}
+object AppButtonDefaultsEx {
+    val shape = AppShapeTokens.button
+    val pillShape = RoundedCornerShape(AppDimens.Radius.round)
+    val iconSpacing = AppDimens.Spacing.extraSmall
+}
+@Composable
+fun AppButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    variant: AppButtonVariant = AppButtonVariant.Primary,
+    size: AppButtonSize = AppButtonSize.Medium,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    fullWidth: Boolean = false,
+    leadingIcon: (@Composable () -> Unit)? = null,
+    trailingIcon: (@Composable () -> Unit)? = null,
+    contentDescription: String? = null
+) {
+    val isEnabled = enabled && !loading
+    val buttonModifier = modifier
+        .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
+        .heightIn(min = size.minHeight)
+        .semantics(mergeDescendants = true) {
+            role = Role.Button
+            if (!contentDescription.isNullOrBlank()) {
+                this.contentDescription = contentDescription
+            }
+            if (loading) {
+                stateDescription = "جاري التحميل"
+                progressBarRangeInfo = androidx.compose.ui.semantics.ProgressBarRangeInfo.Indeterminate
+            }
+        }
+    val contentPadding = PaddingValues(
+        horizontal = size.horizontalPadding,
+        vertical = 0.dp
+    )
+    when (variant) {
+        AppButtonVariant.Primary -> {
+            Button(
+                onClick = onClick,
+                modifier = buttonModifier,
+                enabled = isEnabled,
+                shape = AppButtonDefaultsEx.shape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = BrandPrimary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    disabledContainerColor = BrandPrimary.copy(alpha = 0.45f),
+                    disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                ),
+                contentPadding = contentPadding
+            ) {
+                AppButtonContent(
+                    text = text,
+                    variant = variant,
+                    size = size,
+                    loading = loading,
+                    leadingIcon = leadingIcon,
+                    trailingIcon = trailingIcon
+                )
+            }
+        }
+        AppButtonVariant.Secondary -> {
+            FilledTonalButton(
+                onClick = onClick,
+                modifier = buttonModifier,
+                enabled = isEnabled,
+                shape = AppButtonDefaultsEx.shape,
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                ),
+                contentPadding = contentPadding
+            ) {
+                AppButtonContent(
+                    text = text,
+                    variant = variant,
+                    size = size,
+                    loading = loading,
+                    leadingIcon = leadingIcon,
+                    trailingIcon = trailingIcon
+                )
+            }
+        }
+        AppButtonVariant.Elevated -> {
+            ElevatedButton(
+                onClick = onClick,
+                modifier = buttonModifier,
+                enabled = isEnabled,
+                shape = AppButtonDefaultsEx.shape,
+                colors = ButtonDefaults.elevatedButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                ),
+                contentPadding = contentPadding
+            ) {
+                AppButtonContent(
+                    text = text,
+                    variant = variant,
+                    size = size,
+                    loading = loading,
+                    leadingIcon = leadingIcon,
+                    trailingIcon = trailingIcon
+                )
+            }
+        }
+        AppButtonVariant.Outlined -> {
+            OutlinedButton(
+                onClick = onClick,
+                modifier = buttonModifier,
+                enabled = isEnabled,
+                shape = AppButtonDefaultsEx.shape,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                ),
+                contentPadding = contentPadding
+            ) {
+                AppButtonContent(
+                    text = text,
+                    variant = variant,
+                    size = size,
+                    loading = loading,
+                    leadingIcon = leadingIcon,
+                    trailingIcon = trailingIcon
+                )
+            }
+        }
+        AppButtonVariant.Text -> {
+            TextButton(
+                onClick = onClick,
+                modifier = buttonModifier,
+                enabled = isEnabled,
+                shape = AppButtonDefaultsEx.shape,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                ),
+                contentPadding = contentPadding
+            ) {
+                AppButtonContent(
+                    text = text,
+                    variant = variant,
+                    size = size,
+                    loading = loading,
+                    leadingIcon = leadingIcon,
+                    trailingIcon = trailingIcon
+                )
+            }
+        }
+        AppButtonVariant.Danger -> {
+            Button(
+                onClick = onClick,
+                modifier = buttonModifier,
+                enabled = isEnabled,
+                shape = AppButtonDefaultsEx.shape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ErrorColor,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                    disabledContainerColor = ErrorColor.copy(alpha = 0.45f),
+                    disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                ),
+                contentPadding = contentPadding
+            ) {
+                AppButtonContent(
+                    text = text,
+                    variant = variant,
+                    size = size,
+                    loading = loading,
+                    leadingIcon = leadingIcon,
+                    trailingIcon = trailingIcon
+                )
+            }
+        }
+        AppButtonVariant.Info -> {
+            Button(
+                onClick = onClick,
+                modifier = buttonModifier,
+                enabled = isEnabled,
+                shape = AppButtonDefaultsEx.shape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = InfoColor,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    disabledContainerColor = InfoColor.copy(alpha = 0.45f),
+                    disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                ),
+                contentPadding = contentPadding
+            ) {
+                AppButtonContent(
+                    text = text,
+                    variant = variant,
+                    size = size,
+                    loading = loading,
+                    leadingIcon = leadingIcon,
+                    trailingIcon = trailingIcon
+                )
+            }
+        }
+    }
+}
+@Composable
+private fun AppButtonContent(
+    text: String,
+    variant: AppButtonVariant,
+    size: AppButtonSize,
+    loading: Boolean,
+    leadingIcon: (@Composable () -> Unit)?,
+    trailingIcon: (@Composable () -> Unit)?
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(size.loadingSize),
+                color = currentContentColor(variant),
+                strokeWidth = 2.dp
+            )
+            if (text.isNotBlank()) {
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(AppButtonDefaultsEx.iconSpacing))
+                AppButtonLabel(text = text)
+            }
+            return
+        }
+        if (leadingIcon != null) {
+            Box(modifier = Modifier.size(size.iconSize), contentAlignment = Alignment.Center) {
+                leadingIcon()
+            }
+            androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(AppButtonDefaultsEx.iconSpacing))
+        }
+        AppButtonLabel(text = text)
+        if (trailingIcon != null) {
+            androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(AppButtonDefaultsEx.iconSpacing))
+            Box(modifier = Modifier.size(size.iconSize), contentAlignment = Alignment.Center) {
+                trailingIcon()
+            }
+        }
+    }
+}
+@Composable
+private fun AppButtonLabel(text: String) {
+    Text(
+        text = text,
+        style = AppTypography.labelLarge,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+}
+@Composable
+private fun currentContentColor(variant: AppButtonVariant): Color {
+    val scheme = MaterialTheme.colorScheme
+    return when (variant) {
+        AppButtonVariant.Primary -> scheme.onPrimary
+        AppButtonVariant.Secondary -> scheme.onSecondaryContainer
+        AppButtonVariant.Elevated -> scheme.onSurface
+        AppButtonVariant.Outlined -> scheme.onSurface
+        AppButtonVariant.Text -> scheme.primary
+        AppButtonVariant.Danger -> scheme.onError
+        AppButtonVariant.Info -> scheme.onPrimary
+    }
+}
+@Composable
+fun AppIconButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    contentDescription: String? = null,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
+    icon: @Composable () -> Unit
+) {
+    Surface(
+        modifier = modifier.semantics {
+            role = Role.Button
+            if (!contentDescription.isNullOrBlank()) {
+                this.contentDescription = contentDescription
+            }
+        },
+        onClick = onClick,
+        enabled = enabled,
+        shape = AppButtonDefaultsEx.pillShape,
+        color = Color.Transparent,
+        contentColor = tint
+    ) {
+        Box(
+            modifier = Modifier.size(48.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            icon()
+        }
+    }
+}
+@Composable
+fun AppButtonPill(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    variant: AppButtonVariant = AppButtonVariant.Primary,
+    size: AppButtonSize = AppButtonSize.Medium,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    fullWidth: Boolean = false,
+    leadingIcon: (@Composable () -> Unit)? = null,
+    trailingIcon: (@Composable () -> Unit)? = null,
+    contentDescription: String? = null
+) {
+    Surface(
+        modifier = modifier,
+        shape = AppButtonDefaultsEx.pillShape,
+        color = Color.Transparent
+    ) {
+        AppButton(
+            text = text,
+            onClick = onClick,
+            variant = variant,
+            size = size,
+            enabled = enabled,
+            loading = loading,
+            fullWidth = fullWidth,
+            leadingIcon = leadingIcon,
+            trailingIcon = trailingIcon,
+            contentDescription = contentDescription
+        )
+    }
+}
+
+------------------------------
+FILE: SalesUiEvent.kt
+------------------------------
+package com.myimdad_por.ui.features.sales
+import com.myimdad_por.core.base.UiEvent
+import com.myimdad_por.domain.model.Customer
+import com.myimdad_por.domain.model.PaymentMethod
+import com.myimdad_por.ui.features.sales.models.BillUiModel
+import com.myimdad_por.ui.features.sales.models.CartUiModel
+import com.myimdad_por.ui.features.sales.models.ProductUiModel
+import java.math.BigDecimal
+sealed interface SalesUiEvent : UiEvent {
+    data object Initialize : SalesUiEvent
+    data object RefreshData : SalesUiEvent
+    data object Retry : SalesUiEvent
+    data object ClearError : SalesUiEvent
+    data class SearchProducts(
+        val query: String
+    ) : SalesUiEvent
+    data class SearchBills(
+        val query: String
+    ) : SalesUiEvent
+    data object ClearSearch : SalesUiEvent
+    data class SelectProduct(
+        val product: ProductUiModel
+    ) : SalesUiEvent
+    data class ScanBarcode(
+        val barcode: String
+    ) : SalesUiEvent
+    data class AddProductToCart(
+        val product: ProductUiModel,
+        val quantity: BigDecimal = BigDecimal.ONE
+    ) : SalesUiEvent
+    data class QuickAddProduct(
+        val barcode: String
+    ) : SalesUiEvent
+    data class IncreaseCartItemQuantity(
+        val cartItemId: String
+    ) : SalesUiEvent
+    data class DecreaseCartItemQuantity(
+        val cartItemId: String
+    ) : SalesUiEvent
+    data class UpdateCartItemQuantity(
+        val cartItemId: String,
+        val quantity: BigDecimal
+    ) : SalesUiEvent
+    data class UpdateCartItemPrice(
+        val cartItemId: String,
+        val unitPrice: BigDecimal
+    ) : SalesUiEvent
+    data class UpdateCartItemDiscount(
+        val cartItemId: String,
+        val discountAmount: BigDecimal
+    ) : SalesUiEvent
+    data class UpdateCartItemTax(
+        val cartItemId: String,
+        val taxAmount: BigDecimal
+    ) : SalesUiEvent
+    data class UpdateCartItemNote(
+        val cartItemId: String,
+        val note: String
+    ) : SalesUiEvent
+    data class RemoveCartItem(
+        val cartItemId: String
+    ) : SalesUiEvent
+    data class SelectCartItem(
+        val cartItem: CartUiModel
+    ) : SalesUiEvent
+    data object ClearCart : SalesUiEvent
+    data class SelectCustomer(
+        val customer: Customer
+    ) : SalesUiEvent
+    data object RemoveCustomer : SalesUiEvent
+    data class SearchCustomers(
+        val query: String
+    ) : SalesUiEvent
+    data class SelectPaymentMethod(
+        val paymentMethod: PaymentMethod
+    ) : SalesUiEvent
+    data class UpdatePaidAmount(
+        val amount: BigDecimal
+    ) : SalesUiEvent
+    data class UpdateReferenceNumber(
+        val reference: String
+    ) : SalesUiEvent
+    data class ToggleCreditSale(
+        val enabled: Boolean
+    ) : SalesUiEvent
+    data class UpdateInvoiceNotes(
+        val notes: String
+    ) : SalesUiEvent
+    data class UpdateInvoiceTerms(
+        val terms: String
+    ) : SalesUiEvent
+    data object ValidateSale : SalesUiEvent
+    data object CompleteSale : SalesUiEvent
+    data object ConfirmSale : SalesUiEvent
+    data object CancelSale : SalesUiEvent
+    data object CreateDraftInvoice : SalesUiEvent
+    data object CheckSubscriptionStatus : SalesUiEvent
+    data object RequestSubscriptionUpgrade : SalesUiEvent
+    data object OpenSubscriptionScreen : SalesUiEvent
+    data class OpenBillDetails(
+        val billId: String
+    ) : SalesUiEvent
+    data class PrintInvoice(
+        val bill: BillUiModel
+    ) : SalesUiEvent
+    data class ShareInvoice(
+        val bill: BillUiModel
+    ) : SalesUiEvent
+    data class DownloadInvoicePdf(
+        val bill: BillUiModel
+    ) : SalesUiEvent
+    data object OpenScanner : SalesUiEvent
+    data object CloseScanner : SalesUiEvent
+    data object ToggleProductsSheet : SalesUiEvent
+    data object TogglePaymentSheet : SalesUiEvent
+    data object ToggleCustomerSheet : SalesUiEvent
+    data object DismissDialogs : SalesUiEvent
+    data object NavigateBack : SalesUiEvent
+    data object NavigateToReports : SalesUiEvent
+    data object NavigateToCustomers : SalesUiEvent
+    data object NavigateToProducts : SalesUiEvent
+    data class ShowSuccessMessage(
+        val message: String
+    ) : SalesUiEvent
+    data class ShowErrorMessage(
+        val message: String,
+        val throwable: Throwable? = null
+    ) : SalesUiEvent
+}
+
+------------------------------
+FILE: SalesConstants.kt
+------------------------------
+package com.myimdad_por.ui.features.sales
+import com.myimdad_por.core.utils.Constants
+import com.myimdad_por.domain.model.LegalStatus
+import com.myimdad_por.domain.model.PaymentMethod
+import com.myimdad_por.domain.model.PaymentMethodType
+import com.myimdad_por.domain.model.SaleInvoiceStatus
+import java.math.BigDecimal
+object SalesConstants {
+    object Ui {
+        const val SCREEN_TITLE = "المبيعات"
+        const val SEARCH_HINT = "ابحث عن منتج أو باركود..."
+        const val CUSTOMER_SEARCH_HINT = "ابحث عن عميل..."
+        const val NOTES_HINT = "أضف ملاحظات..."
+        const val EMPTY_CART_MESSAGE = "السلة فارغة"
+        const val NO_PRODUCTS_MESSAGE = "لا توجد منتجات"
+        const val NO_CUSTOMERS_MESSAGE = "لا يوجد عملاء"
+        const val NO_RESULTS_MESSAGE = "لا توجد نتائج مطابقة"
+        const val ADD_TO_CART_SUCCESS = "تمت إضافة المنتج إلى السلة"
+        const val REMOVE_FROM_CART_SUCCESS = "تم حذف المنتج من السلة"
+        const val SALE_COMPLETED_SUCCESS = "تم حفظ الفاتورة بنجاح"
+        const val PAYMENT_COMPLETED_SUCCESS = "تم تسجيل الدفع بنجاح"
+        const val CONFIRM_DELETE_ITEM = "هل تريد حذف العنصر من السلة؟"
+        const val CONFIRM_CANCEL_SALE = "هل تريد إلغاء عملية البيع؟"
+        const val DEFAULT_SEARCH_DEBOUNCE = 300L
+        const val DEFAULT_ANIMATION_DURATION = 250L
+        const val MAX_NOTE_LENGTH = 500
+        const val MAX_BARCODE_LENGTH = 64
+        const val MIN_QUANTITY = 1
+        const val DEFAULT_GRID_SPAN = 2
+        const val RECEIPT_COPY_CUSTOMER = "نسخة العميل"
+        const val RECEIPT_COPY_STORE = "نسخة المتجر"
+        const val LABEL_SUBTOTAL = "الإجمالي"
+        const val LABEL_DISCOUNT = "الخصم"
+        const val LABEL_TAX = "الضريبة"
+        const val LABEL_TOTAL = "الإجمالي النهائي"
+        const val LABEL_PAID = "المدفوع"
+        const val LABEL_REMAINING = "المتبقي"
+        const val ACTION_PAY = "دفع"
+        const val ACTION_SAVE = "حفظ"
+        const val ACTION_CANCEL = "إلغاء"
+        const val ACTION_PRINT = "طباعة"
+        const val ACTION_SHARE = "مشاركة"
+        const val ACTION_ADD = "إضافة"
+        const val ACTION_REMOVE = "حذف"
+        const val ACTION_CLEAR = "تفريغ"
+        const val ACTION_SCAN = "مسح"
+    }
+    object Validation {
+        const val MIN_PRODUCT_QUANTITY = 1
+        const val MAX_PRODUCT_QUANTITY = 999999
+        const val MIN_PRICE = 0.0
+        const val MAX_PRICE = 999999999.99
+        const val MAX_DISCOUNT_PERCENTAGE = 100
+        const val MAX_TAX_PERCENTAGE = 100
+        const val MIN_CUSTOMER_NAME_LENGTH = 3
+        const val MAX_CUSTOMER_NAME_LENGTH = 120
+        const val MIN_BARCODE_LENGTH = 4
+        const val MAX_BARCODE_LENGTH = 64
+        const val MAX_REFERENCE_LENGTH = 128
+        const val MAX_INVOICE_NUMBER_LENGTH = 64
+        const val MIN_SEARCH_QUERY_LENGTH = 1
+    }
+    object Defaults {
+        val DEFAULT_QUANTITY: BigDecimal =
+            BigDecimal.ONE
+        val DEFAULT_DISCOUNT: BigDecimal =
+            BigDecimal.ZERO
+        val DEFAULT_TAX: BigDecimal =
+            BigDecimal.ZERO
+        val DEFAULT_PAID_AMOUNT: BigDecimal =
+            BigDecimal.ZERO
+        val DEFAULT_EXTRA_FEES: BigDecimal =
+            BigDecimal.ZERO
+        val DEFAULT_PAYMENT_METHOD: PaymentMethod =
+            PaymentMethod.CASH
+        val DEFAULT_INVOICE_STATUS: SaleInvoiceStatus =
+            SaleInvoiceStatus.DRAFT
+        val DEFAULT_LEGAL_STATUS: LegalStatus =
+            LegalStatus.NOT_SUBMITTED
+        val DEFAULT_PAYMENT_METHOD_TYPE: PaymentMethodType =
+            PaymentMethodType.CASH
+    }
+    object Invoice {
+        const val PREFIX = "INV"
+        const val DATE_PATTERN = "yyyyMMdd"
+        const val NUMBER_SEPARATOR = "-"
+        const val QR_PREFIX = "SALE"
+        const val TERMS_AND_CONDITIONS = """
+            • البضاعة المباعة لا ترد ولا تستبدل إلا حسب السياسة المعتمدة.
+            • يرجى الاحتفاظ بالفاتورة لإثبات عملية الشراء.
+            • الأسعار شاملة الضرائب إن وجدت.
+        """
+        const val FOOTER_MESSAGE =
+            "شكراً لتعاملكم معنا"
+        const val WATERMARK_DRAFT =
+            "مسودة"
+        const val WATERMARK_PAID =
+            "مدفوعة"
+    }
+    object Cache {
+        const val PRODUCTS_CACHE_KEY =
+            "sales_products_cache"
+        const val CUSTOMERS_CACHE_KEY =
+            "sales_customers_cache"
+        const val CART_CACHE_KEY =
+            "sales_cart_cache"
+        const val LAST_INVOICE_CACHE_KEY =
+            "sales_last_invoice_cache"
+        const val CACHE_EXPIRATION_MINUTES = 15L
+    }
+    object Navigation {
+        const val ROUTE_SALES = "sales"
+        const val ROUTE_CART = "sales_cart"
+        const val ROUTE_CHECKOUT = "sales_checkout"
+        const val ROUTE_INVOICE_PREVIEW = "sales_invoice_preview"
+        const val ROUTE_PAYMENT = "sales_payment"
+        const val ROUTE_HISTORY = "sales_history"
+        const val ARG_INVOICE_ID = "invoice_id"
+        const val ARG_CUSTOMER_ID = "customer_id"
+        const val ARG_PRODUCT_ID = "product_id"
+    }
+    object Error {
+        const val PRODUCT_NOT_FOUND =
+            "المنتج غير موجود"
+        const val CUSTOMER_NOT_FOUND =
+            "العميل غير موجود"
+        const val INVALID_QUANTITY =
+            "الكمية غير صالحة"
+        const val INVALID_PRICE =
+            "السعر غير صالح"
+        const val PAYMENT_FAILED =
+            "فشل تسجيل عملية الدفع"
+        const val EMPTY_CART =
+            "لا يمكن إتمام البيع والسلة فارغة"
+        const val NETWORK_ERROR =
+            Constants.Ui.DEFAULT_ERROR_MESSAGE
+    }
+    object Tags {
+        const val SALES_SCREEN = "sales_screen"
+        const val PRODUCTS_LIST = "products_list"
+        const val CART_LIST = "cart_list"
+        const val CHECKOUT_BUTTON = "checkout_button"
+        const val SEARCH_FIELD = "search_field"
+        const val PAYMENT_DIALOG = "payment_dialog"
+        const val CUSTOMER_SECTION = "customer_section"
+        const val TOTAL_SECTION = "total_section"
+    }
+}
+
+------------------------------
+FILE: PaymentSection.kt
+------------------------------
+package com.myimdad_por.ui.features.sales.components
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.myimdad_por.core.utils.CurrencyFormatter
+import com.myimdad_por.core.utils.orZero
+import com.myimdad_por.core.utils.toBigDecimalOrZero
+import com.myimdad_por.domain.model.PaymentMethod
+import com.myimdad_por.domain.model.PaymentMethodType
+import com.myimdad_por.ui.components.AppButton
+import com.myimdad_por.ui.components.AppButtonSize
+import com.myimdad_por.ui.components.AppButtonVariant
+import com.myimdad_por.ui.components.AppTextField
+import com.myimdad_por.ui.components.AppTextFieldSize
+import com.myimdad_por.ui.components.AppTextFieldVariant
+import com.myimdad_por.ui.theme.AppDimens
+import com.myimdad_por.ui.theme.AppShapeTokens
+import com.myimdad_por.ui.theme.BrandPrimary
+import com.myimdad_por.ui.theme.BrandPrimarySoft
+import com.myimdad_por.ui.theme.BrandPrimaryTint
+import com.myimdad_por.ui.theme.BorderColor
+import com.myimdad_por.ui.theme.ErrorColor
+import com.myimdad_por.ui.theme.SuccessColor
+import com.myimdad_por.ui.theme.TextPrimaryColor
+import com.myimdad_por.ui.theme.TextSecondaryColor
+import com.myimdad_por.ui.theme.WhiteColor
+import java.math.BigDecimal
+@Composable
+fun PaymentSection(
+    selectedPaymentMethod: PaymentMethod,
+    onPaymentMethodSelected: (PaymentMethod) -> Unit,
+    paidAmountInput: String,
+    onPaidAmountInputChange: (String) -> Unit,
+    subtotalAmount: BigDecimal,
+    totalAmount: BigDecimal,
+    remainingAmount: BigDecimal,
+    referenceNumber: String,
+    onReferenceNumberChange: (String) -> Unit,
+    creditSaleEnabled: Boolean,
+    onCreditSaleToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    paymentMethods: List<PaymentMethod> = PaymentMethod.values(),
+    onApplyPayment: () -> Unit = {}
+) {
+    val safeSubtotal = subtotalAmount.orZero()
+    val safeTotal = totalAmount.orZero()
+    val safeRemaining = remainingAmount.orZero()
+    val paidAmountPreview = paidAmountInput.toBigDecimalOrZero().coerceAtLeast(BigDecimal.ZERO)
+    val effectivePaidAmount = paidAmountPreview.coerceAtMost(safeTotal)
+    val showReferenceField = selectedPaymentMethod.requiresReference
+    val referenceHint = when (selectedPaymentMethod.type) {
+        PaymentMethodType.CASH -> "عادة لا يحتاج إلى مرجع"
+        PaymentMethodType.BANK_TRANSFER -> "أدخل رقم التحويل البنكي"
+        PaymentMethodType.WALLET -> "أدخل رقم العملية أو الإيصال"
+        PaymentMethodType.POS -> "أدخل رقم الإيصال من الجهاز"
+        PaymentMethodType.CHEQUE -> "أدخل رقم الشيك أو المرجع"
+        PaymentMethodType.OTHER -> "أدخل المرجع"
+    }
+    val paymentNote = when {
+        creditSaleEnabled -> "تم تفعيل البيع الآجل لهذا العميل"
+        selectedPaymentMethod.type == PaymentMethodType.CASH -> "الدفع نقدًا يجري مباشرة دون مرجع"
+        selectedPaymentMethod.isElectronic() -> "هذه الطريقة تحتاج مرجعًا لتوثيق العملية"
+        else -> "اختر طريقة الدفع المناسبة"
+    }
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = AppShapeTokens.card,
+        color = WhiteColor,
+        contentColor = TextPrimaryColor,
+        border = BorderStroke(1.dp, BrandPrimaryTint),
+        tonalElevation = AppDimens.Elevation.low,
+        shadowElevation = AppDimens.Elevation.low
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Spacing.large),
+            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.large)
+        ) {
+            PaymentSectionHeader()
+            PaymentMethodRow(
+                paymentMethods = paymentMethods,
+                selectedPaymentMethod = selectedPaymentMethod,
+                enabled = enabled && !loading,
+                onPaymentMethodSelected = onPaymentMethodSelected
+            )
+            PaymentSummaryCard(
+                subtotalAmount = safeSubtotal,
+                totalAmount = safeTotal,
+                remainingAmount = safeRemaining,
+                paidAmount = effectivePaidAmount
+            )
+            AppTextField(
+                value = paidAmountInput,
+                onValueChange = onPaidAmountInputChange,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = enabled && !loading,
+                label = "المبلغ المدفوع",
+                placeholder = "0.00",
+                helperText = "أدخل المبلغ الذي تم استلامه فعلاً",
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.AttachMoney,
+                        contentDescription = null,
+                        tint = BrandPrimary
+                    )
+                },
+                variant = AppTextFieldVariant.Outlined,
+                size = AppTextFieldSize.Large,
+                contentDescription = "حقل المبلغ المدفوع"
+            )
+            if (showReferenceField) {
+                AppTextField(
+                    value = referenceNumber,
+                    onValueChange = onReferenceNumberChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = enabled && !loading,
+                    label = "رقم المرجع",
+                    placeholder = "رقم العملية، الإيصال، أو الشيك",
+                    helperText = referenceHint,
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.ReceiptLong,
+                            contentDescription = null,
+                            tint = BrandPrimary
+                        )
+                    },
+                    variant = AppTextFieldVariant.Outlined,
+                    size = AppTextFieldSize.Large,
+                    contentDescription = "حقل رقم المرجع"
+                )
+            }
+            CreditSaleToggleCard(
+                enabled = enabled && !loading,
+                creditSaleEnabled = creditSaleEnabled,
+                onCreditSaleToggle = onCreditSaleToggle
+            )
+            PaymentHintCard(message = paymentNote)
+            AppButton(
+                text = "اعتماد الدفع",
+                onClick = onApplyPayment,
+                modifier = Modifier.fillMaxWidth(),
+                variant = AppButtonVariant.Primary,
+                size = AppButtonSize.Large,
+                enabled = enabled,
+                loading = loading,
+                fullWidth = true,
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Payments,
+                        contentDescription = null
+                    )
+                }
+            )
+        }
+    }
+}
+@Composable
+private fun PaymentSectionHeader() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(BrandPrimary)
+                )
+                Text(
+                    text = "الدفع",
+                    color = TextPrimaryColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                text = "اختر طريقة الدفع وأكمل العملية بأناقة ووضوح",
+                color = TextSecondaryColor,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = BrandPrimarySoft,
+            contentColor = BrandPrimary,
+            border = BorderStroke(1.dp, BrandPrimaryTint)
+        ) {
+            Row(
+                modifier = Modifier.padding(
+                    horizontal = AppDimens.Spacing.small,
+                    vertical = 6.dp
+                ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = BrandPrimary
+                )
+                Spacer(modifier = Modifier.width(AppDimens.Spacing.extraSmall))
+                Text(
+                    text = "جاهز",
+                    color = BrandPrimary
+                )
+            }
+        }
+    }
+}
+@Composable
+private fun PaymentMethodRow(
+    paymentMethods: List<PaymentMethod>,
+    selectedPaymentMethod: PaymentMethod,
+    enabled: Boolean,
+    onPaymentMethodSelected: (PaymentMethod) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)) {
+        Text(
+            text = "طريقة الدفع",
+            color = TextSecondaryColor
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)) {
+            paymentMethods.forEach { method ->
+                PaymentMethodItem(
+                    method = method,
+                    selected = method.id == selectedPaymentMethod.id,
+                    enabled = enabled,
+                    onClick = { onPaymentMethodSelected(method) }
+                )
+            }
+        }
+    }
+}
+@Composable
+private fun PaymentMethodItem(
+    method: PaymentMethod,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val accent = when (method.type) {
+        PaymentMethodType.CASH -> BrandPrimary
+        PaymentMethodType.BANK_TRANSFER -> SuccessColor
+        PaymentMethodType.WALLET -> BrandPrimary
+        PaymentMethodType.POS -> SuccessColor
+        PaymentMethodType.CHEQUE -> TextSecondaryColor
+        PaymentMethodType.OTHER -> BrandPrimary
+    }
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = AppShapeTokens.filledCard,
+        color = if (selected) BrandPrimarySoft else WhiteColor,
+        contentColor = TextPrimaryColor,
+        border = BorderStroke(
+            width = if (selected) 1.5.dp else 1.dp,
+            color = if (selected) BrandPrimary else BorderColor
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Spacing.medium),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(accent.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = paymentIcon(method),
+                    contentDescription = null,
+                    tint = accent
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
+                ) {
+                    Text(
+                        text = method.displayName,
+                        color = TextPrimaryColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (selected) {
+                        StatusPill(text = "محدد", tint = BrandPrimary)
+                    }
+                }
+                Text(
+                    text = method.name,
+                    color = TextSecondaryColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (method.requiresReference) {
+                Text(
+                    text = "مرجع",
+                    color = SuccessColor
+                )
+            }
+        }
+    }
+}
+@Composable
+private fun PaymentSummaryCard(
+    subtotalAmount: BigDecimal,
+    totalAmount: BigDecimal,
+    remainingAmount: BigDecimal,
+    paidAmount: BigDecimal
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = AppShapeTokens.filledCard,
+        color = BrandPrimarySoft,
+        contentColor = TextPrimaryColor,
+        border = BorderStroke(1.dp, BrandPrimaryTint)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Spacing.large),
+            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
+        ) {
+            SummaryRow(
+                label = "الإجمالي الفرعي",
+                value = CurrencyFormatter.formatSDG(subtotalAmount),
+                accent = TextSecondaryColor
+            )
+            SummaryRow(
+                label = "المدفوع",
+                value = CurrencyFormatter.formatSDG(paidAmount),
+                accent = SuccessColor
+            )
+            SummaryRow(
+                label = "المتبقي",
+                value = CurrencyFormatter.formatSDG(remainingAmount),
+                accent = ErrorColor,
+                emphasized = true
+            )
+            SummaryRow(
+                label = "الإجمالي النهائي",
+                value = CurrencyFormatter.formatSDG(totalAmount),
+                accent = BrandPrimary,
+                emphasized = true
+            )
+        }
+    }
+}
+@Composable
+private fun SummaryRow(
+    label: String,
+    value: String,
+    accent: Color,
+    emphasized: Boolean = false
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            color = if (emphasized) TextPrimaryColor else TextSecondaryColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
+        ) {
+            Icon(
+                imageVector = Icons.Default.SwapHoriz,
+                contentDescription = null,
+                tint = accent
+            )
+            Text(
+                text = value,
+                color = accent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+@Composable
+private fun CreditSaleToggleCard(
+    enabled: Boolean,
+    creditSaleEnabled: Boolean,
+    onCreditSaleToggle: (Boolean) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = AppShapeTokens.filledCard,
+        color = WhiteColor,
+        contentColor = TextPrimaryColor,
+        border = BorderStroke(1.dp, BorderColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Spacing.medium),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(BrandPrimarySoft),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AccountBalance,
+                    contentDescription = null,
+                    tint = BrandPrimary
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = "بيع آجل",
+                    color = TextPrimaryColor
+                )
+                Text(
+                    text = "استخدم هذا الخيار إذا كان العميل سيدفع لاحقًا",
+                    color = TextSecondaryColor,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            androidx.compose.material3.Switch(
+                checked = creditSaleEnabled,
+                onCheckedChange = onCreditSaleToggle,
+                enabled = enabled
+            )
+        }
+    }
+}
+@Composable
+private fun PaymentHintCard(message: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = AppShapeTokens.filledCard,
+        color = BrandPrimarySoft,
+        contentColor = TextPrimaryColor,
+        border = BorderStroke(1.dp, BrandPrimaryTint)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Spacing.medium),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(BrandPrimary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.QrCode2,
+                    contentDescription = null,
+                    tint = BrandPrimary
+                )
+            }
+            Text(
+                text = message,
+                color = TextSecondaryColor,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+@Composable
+private fun StatusPill(
+    text: String,
+    tint: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = tint.copy(alpha = 0.12f),
+        contentColor = tint,
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.20f))
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = AppDimens.Spacing.small, vertical = 4.dp),
+            color = tint,
+            maxLines = 1
+        )
+    }
+}
+private fun paymentIcon(method: PaymentMethod) = when (method.type) {
+    PaymentMethodType.CASH -> Icons.Default.AttachMoney
+    PaymentMethodType.BANK_TRANSFER -> Icons.Default.AccountBalance
+    PaymentMethodType.WALLET -> Icons.Default.AccountBalanceWallet
+    PaymentMethodType.POS -> Icons.Default.CreditCard
+    PaymentMethodType.CHEQUE -> Icons.Default.ReceiptLong
+    PaymentMethodType.OTHER -> Icons.Default.Payments
+}
+
+------------------------------
+FILE: SalesSummary.kt
+------------------------------
+package com.myimdad_por.ui.features.sales.components
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material.icons.filled.ShoppingCartCheckout
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.myimdad_por.core.utils.CurrencyFormatter
+import com.myimdad_por.core.utils.orZero
+import com.myimdad_por.ui.components.AppButton
+import com.myimdad_por.ui.components.AppButtonSize
+import com.myimdad_por.ui.components.AppButtonVariant
+import com.myimdad_por.ui.theme.AppDimens
+import com.myimdad_por.ui.theme.AppShapeTokens
+import com.myimdad_por.ui.theme.BrandPrimary
+import com.myimdad_por.ui.theme.BrandPrimarySoft
+import com.myimdad_por.ui.theme.BrandPrimaryTint
+import com.myimdad_por.ui.theme.BorderColor
+import com.myimdad_por.ui.theme.ErrorColor
+import com.myimdad_por.ui.theme.SuccessColor
+import com.myimdad_por.ui.theme.TextPrimaryColor
+import com.myimdad_por.ui.theme.TextSecondaryColor
+import com.myimdad_por.ui.theme.WhiteColor
+import java.math.BigDecimal
+@Composable
+fun SalesSummary(
+    subtotalAmount: BigDecimal,
+    discountAmount: BigDecimal,
+    taxAmount: BigDecimal,
+    totalAmount: BigDecimal,
+    paidAmount: BigDecimal,
+    remainingAmount: BigDecimal,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    onConfirmSale: () -> Unit = {},
+    onCreateDraft: () -> Unit = {},
+    onClearCart: () -> Unit = {}
+) {
+    val subtotal = subtotalAmount.orZero().coerceAtLeast(BigDecimal.ZERO)
+    val discount = discountAmount.orZero().coerceAtLeast(BigDecimal.ZERO)
+    val tax = taxAmount.orZero().coerceAtLeast(BigDecimal.ZERO)
+    val total = totalAmount.orZero().coerceAtLeast(BigDecimal.ZERO)
+    val paid = paidAmount.orZero().coerceAtLeast(BigDecimal.ZERO)
+    val remaining = remainingAmount.orZero().coerceAtLeast(BigDecimal.ZERO)
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = AppShapeTokens.card,
+        color = WhiteColor,
+        contentColor = TextPrimaryColor,
+        border = BorderStroke(1.dp, BrandPrimaryTint),
+        tonalElevation = AppDimens.Elevation.low,
+        shadowElevation = AppDimens.Elevation.low
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Spacing.large),
+            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.large)
+        ) {
+            SalesSummaryHeader()
+            SummaryHighlightCard(
+                label = "الإجمالي النهائي",
+                value = CurrencyFormatter.formatSDG(total),
+                accent = BrandPrimary
+            )
+            SummaryDetailsCard(
+                subtotalAmount = subtotal,
+                discountAmount = discount,
+                taxAmount = tax,
+                totalAmount = total,
+                paidAmount = paid,
+                remainingAmount = remaining
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AppButton(
+                    text = "تفريغ السلة",
+                    onClick = onClearCart,
+                    variant = AppButtonVariant.Outlined,
+                    size = AppButtonSize.Medium,
+                    enabled = enabled && !loading,
+                    loading = false,
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.CleaningServices,
+                            contentDescription = null
+                        )
+                    }
+                )
+                AppButton(
+                    text = "مسودة",
+                    onClick = onCreateDraft,
+                    variant = AppButtonVariant.Secondary,
+                    size = AppButtonSize.Medium,
+                    enabled = enabled && !loading,
+                    loading = false,
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Sell,
+                            contentDescription = null
+                        )
+                    }
+                )
+                AppButton(
+                    text = "اعتماد البيع",
+                    onClick = onConfirmSale,
+                    variant = AppButtonVariant.Primary,
+                    size = AppButtonSize.Medium,
+                    enabled = enabled && !loading,
+                    loading = loading,
+                    fullWidth = false,
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.ShoppingCartCheckout,
+                            contentDescription = null
+                        )
+                    }
+                )
+            }
+        }
+    }
+}
+@Composable
+private fun SalesSummaryHeader() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
+            ) {
+                BoxDot()
+                Text(
+                    text = "ملخص البيع",
+                    color = TextPrimaryColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                text = "مراجعة نهائية سريعة قبل حفظ الفاتورة",
+                color = TextSecondaryColor,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = BrandPrimarySoft,
+            contentColor = BrandPrimary,
+            border = BorderStroke(1.dp, BrandPrimaryTint)
+        ) {
+            Row(
+                modifier = Modifier.padding(
+                    horizontal = AppDimens.Spacing.small,
+                    vertical = 6.dp
+                ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Tune,
+                    contentDescription = null,
+                    tint = BrandPrimary
+                )
+                Spacer(modifier = Modifier.width(AppDimens.Spacing.extraSmall))
+                Text(
+                    text = "منظم",
+                    color = BrandPrimary
+                )
+            }
+        }
+    }
+}
+@Composable
+private fun SummaryHighlightCard(
+    label: String,
+    value: String,
+    accent: Color
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = AppShapeTokens.filledCard,
+        color = BrandPrimarySoft,
+        contentColor = TextPrimaryColor,
+        border = BorderStroke(1.dp, BrandPrimaryTint)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Spacing.large),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = accent.copy(alpha = 0.12f),
+                contentColor = accent
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ReceiptLong,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.padding(10.dp)
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = label,
+                    color = TextSecondaryColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = value,
+                    color = accent,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+@Composable
+private fun SummaryDetailsCard(
+    subtotalAmount: BigDecimal,
+    discountAmount: BigDecimal,
+    taxAmount: BigDecimal,
+    totalAmount: BigDecimal,
+    paidAmount: BigDecimal,
+    remainingAmount: BigDecimal
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = AppShapeTokens.filledCard,
+        color = WhiteColor,
+        contentColor = TextPrimaryColor,
+        border = BorderStroke(1.dp, BorderColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AppDimens.Spacing.large),
+            verticalArrangement = Arrangement.spacedBy(AppDimens.Spacing.medium)
+        ) {
+            SummaryLine(
+                label = "الإجمالي",
+                value = CurrencyFormatter.formatSDG(subtotalAmount),
+                accent = TextSecondaryColor,
+                icon = Icons.Default.AttachMoney
+            )
+            SummaryLine(
+                label = "الخصم",
+                value = CurrencyFormatter.formatSDG(discountAmount),
+                accent = ErrorColor,
+                icon = Icons.Default.Savings
+            )
+            SummaryLine(
+                label = "الضريبة",
+                value = CurrencyFormatter.formatSDG(taxAmount),
+                accent = BrandPrimary,
+                icon = Icons.Default.SwapHoriz
+            )
+            SummaryLine(
+                label = "المدفوع",
+                value = CurrencyFormatter.formatSDG(paidAmount),
+                accent = SuccessColor,
+                icon = Icons.Default.AttachMoney
+            )
+            SummaryLine(
+                label = "المتبقي",
+                value = CurrencyFormatter.formatSDG(remainingAmount),
+                accent = ErrorColor,
+                icon = Icons.Default.ArrowForward
+            )
+            Surface(
+                shape = AppShapeTokens.filledCard,
+                color = BrandPrimarySoft,
+                contentColor = TextPrimaryColor,
+                border = BorderStroke(1.dp, BrandPrimaryTint)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(AppDimens.Spacing.medium),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "الإجمالي النهائي",
+                        color = TextPrimaryColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = CurrencyFormatter.formatSDG(totalAmount),
+                        color = BrandPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+@Composable
+private fun SummaryLine(
+    label: String,
+    value: String,
+    accent: Color,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppDimens.Spacing.small)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accent
+            )
+            Text(
+                text = label,
+                color = TextSecondaryColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Text(
+            text = value,
+            color = accent,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+@Composable
+private fun BoxDot() {
+    Column(
+        modifier = Modifier
+            .size(10.dp)
+            .clip(CircleShape)
+            .background(BrandPrimary)
+    ) {}
+}
+
+------------------------------
+FILE: BillUiModel.kt
+------------------------------
+package com.myimdad_por.ui.features.sales.models
+import androidx.compose.runtime.Immutable
+import com.myimdad_por.core.utils.CurrencyFormatter
+import com.myimdad_por.core.utils.DateTimeUtils
+import com.myimdad_por.core.utils.roundTo
+import com.myimdad_por.domain.model.Customer
+import com.myimdad_por.domain.model.PaymentMethod
+import com.myimdad_por.domain.model.PaymentStatus
+import com.myimdad_por.domain.model.SaleInvoice
+import com.myimdad_por.domain.model.SaleInvoiceStatus
+import java.math.BigDecimal
+import java.time.LocalDateTime
+@Immutable
+data class BillUiModel(
+    val id: String,
+    val invoiceNumber: String,
+    val saleId: String,
+    val status: SaleInvoiceStatus,
+    val paymentStatus: PaymentStatus,
+    val issueDate: LocalDateTime,
+    val dueDate: LocalDateTime?,
+    val employeeId: String,
+    val customerName: String?,
+    val customerPhone: String?,
+    val customerAddress: String?,
+    val customerTaxNumber: String?,
+    val items: List<CartUiModel>,
+    val paymentMethod: PaymentMethod?,
+    val subtotalAmount: BigDecimal,
+    val taxAmount: BigDecimal,
+    val discountAmount: BigDecimal,
+    val totalAmount: BigDecimal,
+    val paidAmount: BigDecimal,
+    val remainingAmount: BigDecimal,
+    val notes: String?,
+    val termsAndConditions: String?,
+    val qrPayload: String?,
+    val formattedSubtotalAmount: String,
+    val formattedTaxAmount: String,
+    val formattedDiscountAmount: String,
+    val formattedTotalAmount: String,
+    val formattedPaidAmount: String,
+    val formattedRemainingAmount: String,
+    val formattedIssueDate: String,
+    val formattedDueDate: String?,
+    val statusLabel: String,
+    val paymentStatusLabel: String
+) {
+    val itemCount: Int
+        get() = items.size
+    val totalQuantity: BigDecimal
+        get() = items.fold(BigDecimal.ZERO) { acc, item ->
+            acc.add(item.quantity)
+        }.roundTo()
+    val formattedTotalQuantity: String
+        get() = CurrencyFormatter.formatPlain(totalQuantity)
+    val isPaid: Boolean
+        get() = paymentStatus == PaymentStatus.PAID
+    val isPending: Boolean
+        get() = paymentStatus == PaymentStatus.PENDING
+    val isPartiallyPaid: Boolean
+        get() = paymentStatus == PaymentStatus.PARTIALLY_PAID
+    val hasCustomer: Boolean
+        get() = !customerName.isNullOrBlank()
+    val hasNotes: Boolean
+        get() = !notes.isNullOrBlank()
+    val hasDiscount: Boolean
+        get() = discountAmount > BigDecimal.ZERO
+    val hasTax: Boolean
+        get() = taxAmount > BigDecimal.ZERO
+    val canBeEdited: Boolean
+        get() = status.isEditable
+    val isOverdue: Boolean
+        get() = dueDate != null &&
+            remainingAmount > BigDecimal.ZERO &&
+            LocalDateTime.now().isAfter(dueDate)
+    val dueStatusLabel: String
+        get() = when {
+            isPaid -> "مدفوعة"
+            isOverdue -> "متأخرة"
+            dueDate != null -> "مستحقة"
+            else -> "فورية"
+        }
+    fun matches(query: String): Boolean {
+        if (query.isBlank()) return true
+        val normalizedQuery = query
+            .trim()
+            .lowercase()
+        return searchableContent.contains(normalizedQuery)
+    }
+    private val searchableContent: String by lazy {
+        buildString {
+            append(invoiceNumber)
+            append(" ")
+            append(saleId)
+            append(" ")
+            append(customerName.orEmpty())
+            append(" ")
+            append(customerPhone.orEmpty())
+            append(" ")
+            append(customerAddress.orEmpty())
+            append(" ")
+            append(customerTaxNumber.orEmpty())
+            append(" ")
+            append(statusLabel)
+            append(" ")
+            append(paymentStatusLabel)
+            notes
+                ?.takeIf { it.isNotBlank() }
+                ?.let {
+                    append(" ")
+                    append(it)
+                }
+            items.forEach { item ->
+                append(" ")
+                append(item.productName)
+                append(" ")
+                append(item.barcode)
+            }
+        }
+            .trim()
+            .lowercase()
+    }
+    companion object {
+        fun fromInvoice(
+            invoice: SaleInvoice,
+            customer: Customer? = null,
+            paymentMethod: PaymentMethod? = null,
+            products: List<ProductUiModel> = emptyList()
+        ): BillUiModel {
+            val productMap = products.associateBy { it.barcode }
+            val cartItems = invoice.items.map { saleItem ->
+                CartUiModel.fromSaleItem(
+                    saleItem = saleItem,
+                    product = productMap[saleItem.productId]
+                )
+            }
+            val subtotal = invoice.subtotalAmount.roundTo()
+            val tax = invoice.taxAmount.roundTo()
+            val discount = invoice.discountAmount.roundTo()
+            val total = invoice.totalAmount.roundTo()
+            val paid = invoice.paidAmount.roundTo()
+            val remaining = invoice.remainingAmount.roundTo()
+            return BillUiModel(
+                id = invoice.id,
+                invoiceNumber = invoice.invoiceNumber,
+                saleId = invoice.saleId,
+                status = invoice.status,
+                paymentStatus = invoice.paymentStatus,
+                issueDate = invoice.issueDate,
+                dueDate = invoice.dueDate,
+                employeeId = invoice.employeeId,
+                customerName = customer?.displayName
+                    ?: invoice.customerSnapshot?.name,
+                customerPhone = customer?.phoneNumber
+                    ?: invoice.customerSnapshot?.phone,
+                customerAddress = customer?.address
+                    ?: invoice.customerSnapshot?.address,
+                customerTaxNumber = customer?.taxNumber
+                    ?: invoice.customerSnapshot?.taxNumber,
+                items = cartItems,
+                paymentMethod = paymentMethod,
+                subtotalAmount = subtotal,
+                taxAmount = tax,
+                discountAmount = discount,
+                totalAmount = total,
+                paidAmount = paid,
+                remainingAmount = remaining,
+                notes = invoice.notes?.trim(),
+                termsAndConditions = invoice.termsAndConditions?.trim(),
+                qrPayload = invoice.qrPayload,
+                formattedSubtotalAmount = CurrencyFormatter.formatSDG(subtotal),
+                formattedTaxAmount = CurrencyFormatter.formatSDG(tax),
+                formattedDiscountAmount = CurrencyFormatter.formatSDG(discount),
+                formattedTotalAmount = CurrencyFormatter.formatSDG(total),
+                formattedPaidAmount = CurrencyFormatter.formatSDG(paid),
+                formattedRemainingAmount = CurrencyFormatter.formatSDG(remaining),
+                formattedIssueDate = DateTimeUtils.formatForDisplay(
+                    invoice.issueDate
+                ),
+                formattedDueDate = invoice.dueDate?.let {
+                    DateTimeUtils.formatForDisplay(it)
+                },
+                statusLabel = mapInvoiceStatus(invoice.status),
+                paymentStatusLabel = mapPaymentStatus(invoice.paymentStatus)
+            )
+        }
+        private fun mapInvoiceStatus(
+            status: SaleInvoiceStatus
+        ): String {
+            return when (status) {
+                SaleInvoiceStatus.DRAFT -> "مسودة"
+                SaleInvoiceStatus.OPEN -> "مفتوحة"
+                SaleInvoiceStatus.ISSUED -> "صادرة"
+                SaleInvoiceStatus.PAID -> "مدفوعة"
+                SaleInvoiceStatus.PARTIALLY_PAID -> "مدفوعة جزئياً"
+                SaleInvoiceStatus.OVERDUE -> "متأخرة"
+                SaleInvoiceStatus.CANCELLED -> "ملغية"
+                SaleInvoiceStatus.VOID -> "باطلة"
+                SaleInvoiceStatus.EXPIRED -> "منتهية"
+            }
+        }
+        private fun mapPaymentStatus(
+            status: PaymentStatus
+        ): String {
+            return when (status) {
+                PaymentStatus.PENDING ->
+                    "معلق"
+                PaymentStatus.PROCESSING ->
+                    "قيد المعالجة"
+                PaymentStatus.REQUIRES_ACTION ->
+                    "يتطلب إجراء"
+                PaymentStatus.AUTHORIZED ->
+                    "مصرح"
+                PaymentStatus.PAID ->
+                    "مدفوع"
+                PaymentStatus.PARTIALLY_PAID ->
+                    "مدفوع جزئياً"
+                PaymentStatus.FAILED ->
+                    "فشلت العملية"
+                PaymentStatus.CANCELED ->
+                    "ملغي"
+                PaymentStatus.REFUNDED ->
+                    "تم الاسترجاع"
+                PaymentStatus.PARTIALLY_REFUNDED ->
+                    "استرجاع جزئي"
+                else ->
+                    "غير معروف"
+            }
+        }
+        fun empty(): BillUiModel {
+            return BillUiModel(
+                id = "",
+                invoiceNumber = "",
+                saleId = "",
+                status = SaleInvoiceStatus.DRAFT,
+                paymentStatus = PaymentStatus.PENDING,
+                issueDate = DateTimeUtils.now(),
+                dueDate = null,
+                employeeId = "",
+                customerName = null,
+                customerPhone = null,
+                customerAddress = null,
+                customerTaxNumber = null,
+                items = emptyList(),
+                paymentMethod = null,
+                subtotalAmount = BigDecimal.ZERO,
+                taxAmount = BigDecimal.ZERO,
+                discountAmount = BigDecimal.ZERO,
+                totalAmount = BigDecimal.ZERO,
+                paidAmount = BigDecimal.ZERO,
+                remainingAmount = BigDecimal.ZERO,
+                notes = null,
+                termsAndConditions = null,
+                qrPayload = null,
+                formattedSubtotalAmount = CurrencyFormatter.formatSDG(BigDecimal.ZERO),
+                formattedTaxAmount = CurrencyFormatter.formatSDG(BigDecimal.ZERO),
+                formattedDiscountAmount = CurrencyFormatter.formatSDG(BigDecimal.ZERO),
+                formattedTotalAmount = CurrencyFormatter.formatSDG(BigDecimal.ZERO),
+                formattedPaidAmount = CurrencyFormatter.formatSDG(BigDecimal.ZERO),
+                formattedRemainingAmount = CurrencyFormatter.formatSDG(BigDecimal.ZERO),
+                formattedIssueDate = "",
+                formattedDueDate = null,
+                statusLabel = "مسودة",
+                paymentStatusLabel = "معلق"
+            )
+        }
+    }
+}
+
+------------------------------
+FILE: Shape.kt
+------------------------------
+package com.myimdad_por.ui.theme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Shapes
+val AppShapes = Shapes(
+    extraSmall = RoundedCornerShape(AppDimens.Radius.small),
+    small = RoundedCornerShape(AppDimens.Radius.medium),
+    medium = RoundedCornerShape(AppDimens.Radius.large),
+    large = RoundedCornerShape(AppDimens.Radius.extraLarge),
+    extraLarge = RoundedCornerShape(AppDimens.Radius.round)
+)
+object AppShapeTokens {
+    val none = RoundedCornerShape(AppDimens.Radius.none)
+    val tiny = RoundedCornerShape(AppDimens.Radius.small)
+    val small = RoundedCornerShape(AppDimens.Radius.medium)
+    val medium = RoundedCornerShape(AppDimens.Radius.large)
+    val large = RoundedCornerShape(AppDimens.Radius.extraLarge)
+    val extraLarge = RoundedCornerShape(AppDimens.Radius.round)
+    val card = RoundedCornerShape(AppDimens.Radius.extraLarge)
+    val elevatedCard = RoundedCornerShape(AppDimens.Radius.extraLarge)
+    val filledCard = RoundedCornerShape(AppDimens.Radius.large)
+    val button = RoundedCornerShape(AppDimens.Radius.large)
+    val buttonLarge = RoundedCornerShape(AppDimens.Radius.extraLarge)
+    val buttonPill = RoundedCornerShape(AppDimens.Radius.round)
+    val chip = RoundedCornerShape(AppDimens.Radius.round)
+    val badge = RoundedCornerShape(AppDimens.Radius.round)
+    val avatar = RoundedCornerShape(AppDimens.Radius.round)
+    val textField = RoundedCornerShape(AppDimens.Radius.extraLarge)
+    val searchBar = RoundedCornerShape(AppDimens.Radius.extraLarge)
+    val dialog = RoundedCornerShape(AppDimens.Radius.extraLarge)
+    val bottomSheet = RoundedCornerShape(
+        topStart = AppDimens.Radius.extraLarge,
+        topEnd = AppDimens.Radius.extraLarge
+    )
+    val topBar = RoundedCornerShape(
+        bottomStart = AppDimens.Radius.extraLarge,
+        bottomEnd = AppDimens.Radius.extraLarge
+    )
+    val bottomBar = RoundedCornerShape(
+        topStart = AppDimens.Radius.extraLarge,
+        topEnd = AppDimens.Radius.extraLarge
+    )
+    val sheetHandle = RoundedCornerShape(AppDimens.Radius.round)
+    val floatingActionButton = RoundedCornerShape(AppDimens.Radius.extraLarge)
+    val chatBubbleIncoming = RoundedCornerShape(
+        topStart = AppDimens.Radius.large,
+        topEnd = AppDimens.Radius.large,
+        bottomEnd = AppDimens.Radius.large,
+        bottomStart = AppDimens.Radius.medium
+    )
+    val chatBubbleOutgoing = RoundedCornerShape(
+        topStart = AppDimens.Radius.large,
+        topEnd = AppDimens.Radius.large,
+        bottomStart = AppDimens.Radius.large,
+        bottomEnd = AppDimens.Radius.medium
+    )
+}
+
+------------------------------
+FILE: Color.kt
+------------------------------
+package com.myimdad_por.ui.theme
+import androidx.compose.ui.graphics.Color
+val BrandPrimary = Color(0xFF25D366)
+val BrandPrimaryDark = Color(0xFF128C7E)
+val BrandSecondary = Color(0xFF075E54)
+val BrandPrimaryTint = Color(0xFFE7F8EE)
+val BrandPrimarySoft = Color(0xFFF0FFF5)
+val SuccessColor = Color(0xFF1E9E5A)
+val SuccessContainer = Color(0xFFE8F7EE)
+val ErrorColor = Color(0xFFE53935)
+val ErrorContainer = Color(0xFFFDECEC)
+val WarningColor = Color(0xFFFFB300)
+val WarningContainer = Color(0xFFFFF6DB)
+val InfoColor = Color(0xFF1A73E8)
+val InfoContainer = Color(0xFFE8F1FE)
+val IncomeColor = Color(0xFF1E9E5A)
+val IncomeContainer = Color(0xFFE8F7EE)
+val ExpenseColor = Color(0xFFD93025)
+val ExpenseContainer = Color(0xFFFDECEC)
+val CreditColor = Color(0xFF0F9D58)
+val DebitColor = Color(0xFFDB4437)
+val BackgroundColor = Color(0xFFF7F8FA)
+val SurfaceColor = Color(0xFFFFFFFF)
+val SurfaceVariantColor = Color(0xFFF1F3F5)
+val DividerColor = Color(0xFFE9EDEF)
+val BorderColor = Color(0xFFDDE3E8)
+val TextPrimaryColor = Color(0xFF111B21)
+val TextSecondaryColor = Color(0xFF667781)
+val TextTertiaryColor = Color(0xFF8696A0)
+val TextDisabledColor = Color(0xFFADB8C1)
+val IconColor = Color(0xFF54656F)
+val IconMutedColor = Color(0xFF8696A0)
+val IconOnBrandColor = Color(0xFFFFFFFF)
+val IncomingBubbleColor = Color(0xFFFFFFFF)
+val OutgoingBubbleColor = Color(0xFFD9FDD3)
+val IncomingBubbleTextColor = Color(0xFF111B21)
+val OutgoingBubbleTextColor = Color(0xFF111B21)
+val NavigationSelectedColor = Color(0xFF25D366)
+val NavigationUnselectedColor = Color(0xFF667781)
+val FloatingActionButtonColor = Color(0xFF25D366)
+val FloatingActionButtonContentColor = Color(0xFFFFFFFF)
+val BadgeColor = Color(0xFF25D366)
+val BadgeContentColor = Color(0xFFFFFFFF)
+val DarkBackgroundColor = Color(0xFF0B141A)
+val DarkSurfaceColor = Color(0xFF111B21)
+val DarkSurfaceVariantColor = Color(0xFF1F2C33)
+val DarkDividerColor = Color(0xFF2A3942)
+val DarkBorderColor = Color(0xFF33424C)
+val DarkTextPrimaryColor = Color(0xFFE9EDEF)
+val DarkTextSecondaryColor = Color(0xFFAEBAC1)
+val DarkTextTertiaryColor = Color(0xFF8696A0)
+val DarkTextDisabledColor = Color(0xFF6E7B83)
+val DarkIconColor = Color(0xFFAEBAC1)
+val DarkIconMutedColor = Color(0xFF8696A0)
+val DarkIncomingBubbleColor = Color(0xFF202C33)
+val DarkOutgoingBubbleColor = Color(0xFF005C4B)
+val DarkIncomingBubbleTextColor = Color(0xFFE9EDEF)
+val DarkOutgoingBubbleTextColor = Color(0xFFE9EDEF)
+val TransparentColor = Color(0x00000000)
+val WhiteColor = Color(0xFFFFFFFF)
+val BlackColor = Color(0xFF000000)
+
+------------------------------
+FILE: Dimens.kt
+------------------------------
+package com.myimdad_por.ui.theme
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+object AppDimens {
+    object Spacing {
+        val none: Dp = 0.dp
+        val extraSmall: Dp = 4.dp
+        val small: Dp = 8.dp
+        val medium: Dp = 12.dp
+        val normal: Dp = 16.dp
+        val large: Dp = 20.dp
+        val extraLarge: Dp = 24.dp
+        val huge: Dp = 32.dp
+        val xLarge: Dp = 40.dp
+        val xxLarge: Dp = 48.dp
+    }
+    object Radius {
+        val none: Dp = 0.dp
+        val small: Dp = 8.dp
+        val medium: Dp = 12.dp
+        val large: Dp = 16.dp
+        val extraLarge: Dp = 20.dp
+        val round: Dp = 999.dp
+    }
+    object Elevation {
+        val none: Dp = 0.dp
+        val low: Dp = 2.dp
+        val medium: Dp = 4.dp
+        val high: Dp = 8.dp
+        val veryHigh: Dp = 12.dp
+    }
+    object Icon {
+        val tiny: Dp = 14.dp
+        val small: Dp = 18.dp
+        val normal: Dp = 24.dp
+        val large: Dp = 28.dp
+        val extraLarge: Dp = 32.dp
+        val avatar: Dp = 40.dp
+        val fab: Dp = 56.dp
+    }
+    object Component {
+        val chipHeight: Dp = 32.dp
+        val buttonHeight: Dp = 48.dp
+        val textFieldHeight: Dp = 56.dp
+        val topBarHeight: Dp = 64.dp
+        val bottomBarHeight: Dp = 72.dp
+        val avatarSmall: Dp = 32.dp
+        val avatarMedium: Dp = 40.dp
+        val avatarLarge: Dp = 56.dp
+        val cardMinHeight: Dp = 72.dp
+        val dialogMaxWidth: Dp = 320.dp
+        val dividerThickness: Dp = 1.dp
+        val borderThickness: Dp = 1.dp
+    }
+    object Text {
+        val caption = 12.sp
+        val bodySmall = 13.sp
+        val body = 14.sp
+        val bodyLarge = 16.sp
+        val titleSmall = 18.sp
+        val title = 20.sp
+        val headline = 24.sp
+        val display = 30.sp
+    }
+    object Layout {
+        val screenPadding: Dp = 16.dp
+        val sectionPadding: Dp = 20.dp
+        val listItemVerticalPadding: Dp = 12.dp
+        val listItemHorizontalPadding: Dp = 16.dp
+        val contentMaxWidth: Dp = 480.dp
+        val imageHeight: Dp = 180.dp
+        val emptyStateIconSize: Dp = 72.dp
+    }
+    object Chat {
+        val bubbleMaxWidth: Dp = 280.dp
+        val bubblePadding: Dp = 12.dp
+        val messageSpacing: Dp = 8.dp
+    }
+}
+
+------------------------------
+FILE: Theme.kt
+------------------------------
+package com.myimdad_por.ui.theme
+import androidx.compose.ui.graphics.Color
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import com.myimdad_por.R
+private val lightColorScheme = lightColorScheme(
+    primary = BrandPrimary,
+    onPrimary = IconOnBrandColor,
+    primaryContainer = BrandPrimaryTint,
+    onPrimaryContainer = TextPrimaryColor,
+    secondary = BrandSecondary,
+    onSecondary = WhiteColor,
+    secondaryContainer = BrandPrimarySoft,
+    onSecondaryContainer = TextPrimaryColor,
+    tertiary = InfoColor,
+    onTertiary = WhiteColor,
+    tertiaryContainer = InfoContainer,
+    onTertiaryContainer = TextPrimaryColor,
+    error = ErrorColor,
+    onError = WhiteColor,
+    errorContainer = ErrorContainer,
+    onErrorContainer = TextPrimaryColor,
+    background = BackgroundColor,
+    onBackground = TextPrimaryColor,
+    surface = SurfaceColor,
+    onSurface = TextPrimaryColor,
+    surfaceVariant = SurfaceVariantColor,
+    onSurfaceVariant = TextSecondaryColor,
+    outline = BorderColor,
+    outlineVariant = DividerColor,
+    inverseOnSurface = WhiteColor,
+    inverseSurface = DarkSurfaceColor,
+    inversePrimary = BrandPrimary,
+    scrim = BlackColor.copy(alpha = 0.32f)
+)
+private val darkColorScheme = darkColorScheme(
+    primary = BrandPrimary,
+    onPrimary = IconOnBrandColor,
+    primaryContainer = BrandPrimaryDark,
+    onPrimaryContainer = WhiteColor,
+    secondary = BrandPrimarySoft,
+    onSecondary = DarkTextPrimaryColor,
+    secondaryContainer = DarkSurfaceVariantColor,
+    onSecondaryContainer = DarkTextPrimaryColor,
+    tertiary = InfoColor,
+    onTertiary = WhiteColor,
+    tertiaryContainer = DarkSurfaceVariantColor,
+    onTertiaryContainer = DarkTextPrimaryColor,
+    error = ErrorColor,
+    onError = WhiteColor,
+    errorContainer = Color(0xFF5A1A1A),
+    onErrorContainer = DarkTextPrimaryColor,
+    background = DarkBackgroundColor,
+    onBackground = DarkTextPrimaryColor,
+    surface = DarkSurfaceColor,
+    onSurface = DarkTextPrimaryColor,
+    surfaceVariant = DarkSurfaceVariantColor,
+    onSurfaceVariant = DarkTextSecondaryColor,
+    outline = DarkBorderColor,
+    outlineVariant = DarkDividerColor,
+    inverseOnSurface = TextPrimaryColor,
+    inverseSurface = SurfaceColor,
+    inversePrimary = BrandPrimary,
+    scrim = BlackColor.copy(alpha = 0.45f)
+)
+@Composable
+fun ImdadPorTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    dynamicColor: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val colors = when {
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        }
+        darkTheme -> darkColorScheme
+        else -> lightColorScheme
+    }
+    SideEffect {
+        context.findActivity()?.window?.let { window ->
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.isAppearanceLightStatusBars = !darkTheme
+            controller.isAppearanceLightNavigationBars = !darkTheme
+            window.statusBarColor = colors.surface.toArgb()
+            window.navigationBarColor = colors.surface.toArgb()
+        }
+    }
+    MaterialTheme(
+        colorScheme = colors,
+        typography = AppTypography,
+        shapes = AppShapes,
+        content = content
+    )
+}
+@Composable
+fun AppTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    dynamicColor: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    ImdadPorTheme(
+        darkTheme = darkTheme,
+        dynamicColor = dynamicColor,
+        content = content
+    )
+}
+fun provideLightColorScheme(): ColorScheme = lightColorScheme
+fun provideDarkColorScheme(): ColorScheme = darkColorScheme
+private tailrec fun Context.findActivity(): Activity? {
+    return when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
+}
+
